@@ -303,6 +303,8 @@ int main(int argc, char *argv[]) {
         }
     }
 
+
+
     // write remaining posting list to disk
     if(postings_list.size())
     {
@@ -310,6 +312,18 @@ int main(int argc, char *argv[]) {
         posting_list_to_disk(postings_list, temporary_file);
     }
 
+    std::cout << "Total Documents  " << document_cnt << "\n";
+    std::ofstream document_file("documents", std::ofstream::out | std::ofstream::trunc); // normal file
+    if(!document_file)
+    {
+        std::cerr << "Error opening file" << std::endl;
+        return 1;
+    }
+    for(auto const &pr : docId_to_idx)
+    {
+        document_file << pr.second << " " << pr.first << "\n";
+    }
+    document_file.close();
 
     // merge the postings list into one
     int current_count = temporary_file_count;
@@ -380,24 +394,18 @@ int main(int argc, char *argv[]) {
         {
             int doc_id, tf;
             iss >> doc_id >> tf;
-            std::cout << doc_id << " " << tf << std::endl;
             std::vector<std::string> variable_bytes_doc_id = variable_byte_encoding(doc_id);
             std::vector<std::string> variable_bytes_tf = variable_byte_encoding(tf);
 
             for(auto byte_string : variable_bytes_doc_id)
             {
-                std::cout << byte_string ;
                 write_byte_string(postings_list_file, byte_string);
             }
 
             for(auto byte_string : variable_bytes_tf)
             {
-                std::cout << byte_string ;
                 write_byte_string(postings_list_file, byte_string);
-            }
-            std::cout <<"\n\n";
-            // std::cout << variable_bytes_doc_id.size() << " " << variable_bytes_tf.size() << "\n";
-            
+            }            
             total_bytes_written += variable_bytes_doc_id.size() + variable_bytes_tf.size();
         }
     }
