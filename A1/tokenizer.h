@@ -27,11 +27,12 @@ class BPETokenizer
         SimpleTokenizer pretokenizer;
         std::map<std::vector<std::string>, uint64_t> compute_pair_frequencies();
         std::vector<std::vector<std::string>> merges;
+        void merge_pair(std::string &first, std::string &second);
 
     public:
         BPETokenizer(const std::set<char>& delimiters, int max_iter);
         void train(std::vector<std::string> &corpus);
-        void merge_pair(std::string &first, std::string &second);
+        std::vector<std::string> tokenize(std::string text);
 
 
 };

@@ -153,18 +153,65 @@ void BPETokenizer::train(std::vector<std::string> &corpus)
 
 }
 
+std::vector<std::string> BPETokenizer::tokenize(std::string text)
+{
+    std::vector<std::string> pretokenized_text = pretokenizer.tokenize(text);
+    std::vector<std::vector<std::string>> splits;
+    for(auto const &word : pretokenized_text)
+    {
+        std::vector<std::string> split;
+        for(int idx = 0 ; idx < word.size() ; idx++)
+        {
+            split.push_back(word.substr(idx,1));
+        }
+        splits.push_back(split);
+    }
+
+    for (auto const& merge : merges)
+    {
+        const std::string &first_string = merge[0], &second_string = merge[1];
+        for(int word_idx = 0; word_idx < splits.size(); ++word_idx)
+        {
+            uint32_t idx = 0;
+            while(idx < splits[word_idx].size()-1)
+            {
+                if(splits[word_idx][idx] == first_string and splits[word_idx][idx+1]==second_string)
+                {
+                    splits[word_idx].erase(splits[word_idx].begin() + idx, splits[word_idx].begin() + idx + 2);
+                    splits[word_idx].insert(splits[word_idx].begin() + idx, first_string + second_string);
+                }else{
+                    idx ++;
+                }
+            }
+
+        }
+    }
+
+    std::vector<std::string> tokens;
+    for(auto &split : splits)
+    {
+        for(auto &token : split)
+        {
+            tokens.push_back(token);
+        }
+    }
+    return tokens;
+
+}
 
 int main(int argc, char* argv[])
 {
-    BPETokenizer tokenizer(std::set<char>{'.', ' ', ':', ';', '\"', '\'', '.', '?', '!', ',', '\n'}, 100);
+    BPETokenizer tokenizer(std::set<char>{'.', ' ', ':', ';', '\"', '\'', '.', '?', '!', ',', '\n'}, 10);
     std::vector<std::string> corpus;
     corpus.push_back("This is part of the information retreival course");
     corpus.push_back("My name is chinmay");
     corpus.push_back("This is a randomly generated sentence");
     corpus.push_back("Tokenization algorithm using byte pair encoding");
+
     tokenizer.train(corpus);
-
-
-
+    std::string text = "This, is the \'text\' I want to tokenize; My name is:chinmay. "; 
+    std::vector<std::string> tokens = tokenizer.tokenize(text);
+    for(auto token : tokens)
+        std::cout << "-->" << token << "\n" ;
     return 0;
 }
