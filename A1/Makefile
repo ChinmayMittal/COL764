@@ -7,14 +7,14 @@ INVERT_INDEX_TARGET = inverted_index
 SEARCH_TARGET = search
 
 # Source files
-SRC = inverted_index.cpp pugixml.cpp tokenizer.cpp
+SRC = inverted_index.cpp pugixml.cpp tokenizer.cpp utils.cpp
 OBJS = $(SRC:.cpp=.o)
 
-SEARCH_SRC = search.cpp tokenizer.cpp
+SEARCH_SRC = search.cpp tokenizer.cpp utils.cpp pugixml.cpp
 SEARCH_OBJS = $(SEARCH_SRC:.cpp=.o)
 
 # Headers
-HEADERS = tokenizer.h pugixml.hpp
+HEADERS = tokenizer.h pugixml.hpp utils.h
 
 # Default target to build everything
 my_index: $(INVERT_INDEX_TARGET)

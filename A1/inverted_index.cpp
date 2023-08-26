@@ -14,24 +14,10 @@
 #include "document.h"
 #include "pugixml.hpp"
 #include "tokenizer.h"
+#include "utils.h"
 
 namespace fs = std::__fs::filesystem;
 
-void print_progrss(int steps_completed, int total_steps)
-{
-    float progress = static_cast<float>(steps_completed)/total_steps;
-    int barWidth = 40;
-
-    std::cout << "[";
-    int pos = barWidth * progress;
-    for (int j = 0; j < barWidth; ++j) {
-        if (j < pos) std::cout << "=";
-        else if (j == pos) std::cout << ">";
-        else std::cout << " ";
-    }
-    std::cout << "] " << int(progress * 100.0) << "%\r";
-    std::cout.flush();
-}
 
 void posting_list_to_disk(std::map<std::string, std::vector<std::pair<int, int>>> &postings_list, std::string file_path)
 {
@@ -152,42 +138,6 @@ void merge_postings_list_from_disk(std::string file_path_1, std::string file_pat
     file2.close();
     temporary_file.close();
 }
-std::vector<Document> parse_file(std::string file)
-{
-    std::vector<Document> documents;
-
-    std::ifstream input_file(file);
-    if (!input_file) {
-        std::cerr << "Error opening the file." << std::endl;
-        return documents;
-    }
-
-    pugi::xml_document doc;
-    if (!doc.load_file(file.c_str())) {
-        std::cerr << "Error loading XML file." << std::endl;
-        return documents;
-    }
-
-    for (pugi::xpath_node doc_node : doc.select_nodes("//DOC")) {
-        Document current_document;
-        pugi::xml_node docXml = doc_node.node(); // Get the corresponding xml_node
-
-        for (pugi::xml_node node : docXml.children()) {
-            if (std::string(node.name()) == "DOCID") {
-                current_document.docID = node.text().get();
-            } else if (std::string(node.name()) == "TITLE") {
-                current_document.title = node.text().get();
-            } else if (std::string(node.name()) == "CONTENT") {
-                current_document.content = node.text().get();
-            }
-        }
-        documents.push_back(current_document);
-    }
-
-
-    input_file.close();
-    return documents;
-}
 
 std::string byte_to_bit_string(unsigned char byte) {
     return std::bitset<8>(byte).to_string();
@@ -256,7 +206,7 @@ int main(int argc, char *argv[]) {
     }
 
     std::cout << "Training Directory: " << directory_path << std::endl;
-    SimpleTokenizer tokenizer(std::set<char>{'.', ' ', ':', ';', '\"', '\'', '.', '?', '!', ',', '\n'});
+    SimpleTokenizer tokenizer(std::set<char>{'.', ' ', ':', ';', '\"', '\'', '.', '?', '!', ',', '\n'}); // this tokenizer should be chosen accordign to CMD args
     std::map<std::string, int> docId_to_idx;
     std::map<std::string, std::vector<std::pair<int, int>>> postings_list; // term --> list[doc_idx, term_frequency]
     int document_cnt = 0;
@@ -271,7 +221,7 @@ int main(int argc, char *argv[]) {
     int files_processed = 0;
     int temporary_file_count = 0;
     for (const auto &file : fs::directory_iterator(directory_path)) {
-        print_progrss(files_processed++, file_cnt);
+        print_progress(files_processed++, file_cnt);
         if (fs::is_regular_file(file)) {
             // process file
             std::vector<Document> documents = parse_file(file.path());
@@ -313,17 +263,7 @@ int main(int argc, char *argv[]) {
     }
 
     std::cout << "Total Documents  " << document_cnt << "\n";
-    std::ofstream document_file("documents", std::ofstream::out | std::ofstream::trunc); // normal file
-    if(!document_file)
-    {
-        std::cerr << "Error opening file" << std::endl;
-        return 1;
-    }
-    for(auto const &pr : docId_to_idx)
-    {
-        document_file << pr.second << " " << pr.first << "\n";
-    }
-    document_file.close();
+
 
     // merge the postings list into one
     int current_count = temporary_file_count;
@@ -380,6 +320,7 @@ int main(int argc, char *argv[]) {
     std::string line;
     int total_bytes_written =0;
 
+    std::unordered_map<std::string, unsigned int> term_to_document_count;
     while(std::getline(uncomprssed_postings_file, line))
     {
         std::istringstream iss(line);
@@ -388,13 +329,13 @@ int main(int argc, char *argv[]) {
         iss >> term >> term_frequency;
         // write term and its document count and the offset in the posting file to the vocabulary file
         vocab_file << term << " " << term_frequency << " " << total_bytes_written << "\n" ;
-        
+        term_to_document_count[term] = term_frequency;
         // write the posting list as bytes
         for(int idx = 0 ; idx < term_frequency ; idx++)
         {
             int doc_id, tf;
             iss >> doc_id >> tf;
-            std::vector<std::string> variable_bytes_doc_id = variable_byte_encoding(doc_id);
+            std::vector<std::string> variable_bytes_doc_id = variable_byte_encoding(doc_id); // the type of encoding should be decided by CMD arguments
             std::vector<std::string> variable_bytes_tf = variable_byte_encoding(tf);
 
             for(auto byte_string : variable_bytes_doc_id)
@@ -410,11 +351,48 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    vocab_file.close();
     uncomprssed_postings_file.close();
     postings_list_file.close();
 
-    // std::vector<std::string> variable_bytes = variable_byte_encoding(214577);
+    // write document id to document idx mappings to the vocabulary file
+    vocab_file << "\n" ; // seperator to seperate the document mappings and the actual vocabulary
+
+    // also write normalized document vector norms to this file
+    std::unordered_map<std::string, float> normalized_document_vector_norms;
+    files_processed = 0 ;
+    for (const auto &file : fs::directory_iterator(directory_path)) 
+    { // loop for finding all the normalized document vectors
+        print_progress(files_processed++, file_cnt);
+        if (fs::is_regular_file(file)) {
+            // process file
+            std::vector<Document> documents = parse_file(file.path());
+            for (auto const& doc : documents) {
+                float document_vector_norm = 0.0;
+                std::string document_content = doc.title + " " + doc.content;
+                for(char &ch : document_content)
+                    ch = tolower(ch);
+                std::vector<std::string> tokens = tokenizer.tokenize(document_content);
+                std::map<std::string, int> token_counts;
+                for(auto const &token : tokens) token_counts[token] += 1;
+                for(auto const &pr : token_counts)
+                {
+                    const std::string &token = pr.first;
+                    const int token_frequency = pr.second;
+                    // need inverse document frequency
+                    float document_vector_element = inverse_document_frequency(term_to_document_count[token], document_cnt) * token_frequency;
+                    document_vector_norm += (document_vector_element*document_vector_element);
+                }
+                normalized_document_vector_norms[doc.docID] = sqrt(document_vector_norm);
+            }
+        }
+    }
+
+    for(auto const &pr : docId_to_idx)
+    {
+        vocab_file << pr.second << " " << pr.first << " " << normalized_document_vector_norms[pr.first] <<  "\n";
+    }
+    vocab_file.close();
+
 
     // Stop the clock and print the execution time
     auto end = std::chrono::high_resolution_clock::now();

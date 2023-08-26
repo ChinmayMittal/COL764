@@ -1,11 +1,11 @@
 #include <iostream>
 #include <sstream>
 #include <fstream>
-#include <cmath>
 #include <queue>
 #include <map>
 
 #include "tokenizer.h"
+#include "utils.h"
 
 struct Query {
     int number;
@@ -56,15 +56,6 @@ std::vector<Query> parseQueries(const std::string& filename) {
 }
 
 
-float term_frequency(float term_count)
-{
-    return (term_count ? 1 + log2(term_count) : 0) ;
-}
-
-float inverse_document_frequency(float document_frequency, float total_documents)
-{
-    return log2(1 + total_documents/document_frequency);
-}
 
 void read_variable_byte(std::ifstream &postings_file, int &num)
 { 
@@ -127,10 +118,8 @@ int main(int argc, char* argv[])
     }
 
     SimpleTokenizer tokenizer(std::set<char>{'.', ' ', ':', ';', '\"', '\'', '.', '?', '!', ',', '\n'});
-    unsigned int total_document_count = 265788; // to be read from the file
 
-    // read the quer files and get all queries
-
+    // read the query files and get all queries
     std::vector<Query> queries = parseQueries(query_file_path);
 
     std::map<std::string, std::pair<int,int>> vocab_dict; // term --> <doc_freq, byte_offset>
@@ -143,12 +132,29 @@ int main(int argc, char* argv[])
     std::string line;
     while(std::getline(vocab_file, line))
     {
+        if(line.length() == 0)
+            break ; // this line marks the end of the vocabulary and start of document mappings
         std::istringstream iss(line);
         std::string vocab_term;
         iss >> vocab_term;
         int document_frequency, byte_offset;
         iss >> document_frequency >> byte_offset;
         vocab_dict[vocab_term] = std::make_pair(document_frequency, byte_offset);
+    }
+    // store document mappings
+    std::unordered_map<int, std::string> document_idx_to_id;
+    std::unordered_map<int, float> normalized_document_vector_norms;
+    unsigned total_document_count = 0;
+    while(std::getline(vocab_file, line))
+    {
+        std::istringstream iss(line);
+        unsigned int document_idx;
+        std::string document_id;
+        float document_vector_norm;
+        iss >> document_idx >> document_id >> document_vector_norm;
+        total_document_count ++;
+        document_idx_to_id[document_idx] = document_id;
+        normalized_document_vector_norms[document_idx] = document_vector_norm;
     }
     vocab_file.close();
     // // tokenize the query
@@ -193,6 +199,7 @@ int main(int argc, char* argv[])
             vocab_file.close();
         }
         // need to normalize document scores [TODO]
+        for(int idx = 0; idx < document_scores.size(); idx++) document_scores[idx] /= normalized_document_vector_norms[idx];
 
         // get the best documents
         // min heap for this purpose stores <score, id> for the best documents
@@ -220,11 +227,8 @@ int main(int argc, char* argv[])
             minHeap.pop();
         }
 
-        // to be written to file
-
         for(int idx = best_documents.size()-1 ; idx >= 0 ; idx--) {
-            // should convert to document id string from file 
-            output_file << query.number << " 0 " << best_documents[idx]  << " " << 1 << "\n";
+            output_file << query.number << " 0 " << document_idx_to_id[best_documents[idx]]  << " " << 1 << "\n";
         }
     }
 

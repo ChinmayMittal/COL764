@@ -1,3 +1,6 @@
+#ifndef DOCUMENT_H
+#define DOCUMENT_H
+
 #include<string>
 
 struct Document {
@@ -5,3 +8,5 @@ struct Document {
     std::string title;
     std::string content;
 };
+
+#endif // DOCUMENT_H
