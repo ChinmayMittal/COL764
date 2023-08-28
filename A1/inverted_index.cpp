@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <bitset>
 #include <cassert>
+#include <unordered_map>
 
 #include "document.h"
 #include "pugixml.hpp"
@@ -186,14 +187,37 @@ void write_byte_string(std::ofstream &postings_list_file, std::string &byte_stri
     postings_list_file.write(reinterpret_cast<const char*>(&byte), sizeof(byte));
 }
 
+void write_multiple_byte_strings(std::ofstream &postings_list_file, std::vector<std::string> &byte_strings)
+{
+    size_t num_bytes = byte_strings.size();
+    std::vector<unsigned char> buffer(num_bytes, 0);     // Construct a buffer to hold the binary data
+    unsigned char byte;
+    // Populate the buffer using bitwise operations
+    for (size_t i = 0; i < byte_strings.size(); ++i) {
+        std::string &byte_string = byte_strings[i];
+        byte = 0;
+        assert(byte_string.size() == 8);
+        for (size_t i = 0; i < 8; ++i) {
+            byte |= (byte_string[i] - '0') << (7 - i);
+        }
+        buffer[i] = byte; 
+    }
+    // Write the entire buffer to the file
+    postings_list_file.write(reinterpret_cast<const char*>(buffer.data()), buffer.size() * sizeof(byte));
+}
+
 int main(int argc, char *argv[]) {
+    // TODO 
+    /*
+    Command line arguments for type of tokenizer and the type of compression 
+    */
     if(argc <=1)
     {
         std::cout << "Requires Training Directory as Script Argument" << std::endl;
         return 0;
     }
     std::string directory_path = argv[1];
-    std::string temporary_directory_path = "./temp";
+    std::string temporary_directory_path = "./temp"; // temporary directory used to store files
     std::string vocabulary;
     // Start the clock
     auto start = std::chrono::high_resolution_clock::now();
@@ -207,8 +231,8 @@ int main(int argc, char *argv[]) {
 
     std::cout << "Training Directory: " << directory_path << std::endl;
     SimpleTokenizer tokenizer(std::set<char>{'.', ' ', ':', ';', '\"', '\'', '.', '?', '!', ',', '\n'}); // this tokenizer should be chosen accordign to CMD args
-    std::map<std::string, int> docId_to_idx;
-    std::map<std::string, std::vector<std::pair<int, int>>> postings_list; // term --> list[doc_idx, term_frequency]
+    std::unordered_map<std::string, int> docId_to_idx;
+    std::map<std::string, std::vector<std::pair<int, int>>> postings_list; // term --> list[doc_idx, term_frequency], map is required since we want the vocabulary to be sorted
     int document_cnt = 0;
 
     int file_cnt = 0; // count the total number of files to be processed
@@ -230,7 +254,7 @@ int main(int argc, char *argv[]) {
                 for(char &ch : document_content)
                     ch = tolower(ch);
                 std::vector<std::string> tokens = tokenizer.tokenize(document_content);
-                std::map<std::string, int> token_counts;
+                std::unordered_map<std::string, int> token_counts;
                 for(auto const &token : tokens) token_counts[token] += 1;
                 for(auto const &pr : token_counts)
                 {
@@ -264,7 +288,13 @@ int main(int argc, char *argv[]) {
 
     std::cout << "Total Documents  " << document_cnt << "\n";
 
+    // Stop the clock and print the execution time
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::seconds>(end - start);
+    std::cout << "Execution time for Creating Initial Postings List: " << duration.count() << " seconds" << std::endl;
 
+    
+    start = std::chrono::high_resolution_clock::now();
     // merge the postings list into one
     int current_count = temporary_file_count;
     while(current_count > 1)
@@ -299,8 +329,13 @@ int main(int argc, char *argv[]) {
         }
         current_count = (current_count+1)/2;
     }
+    end = std::chrono::high_resolution_clock::now();
+    duration = std::chrono::duration_cast<std::chrono::seconds>(end - start);
+    std::cout << "Execution time for Merging Initial Postings List: " << duration.count() << " seconds" << std::endl;
 
+    
     // create the compressed postings list file and vocabulary
+    start = std::chrono::high_resolution_clock::now();
     std::ofstream vocab_file("vocabulary", std::ofstream::out | std::ofstream::trunc); // normal file
     std::ofstream postings_list_file("postings", std::ios::binary | std::ios::trunc); // binary file
     if( !vocab_file || !postings_list_file)
@@ -331,24 +366,31 @@ int main(int argc, char *argv[]) {
         vocab_file << term << " " << term_frequency << " " << total_bytes_written << "\n" ;
         term_to_document_count[term] = term_frequency;
         // write the posting list as bytes
+
+        std::vector<std::string> byte_strings;
         for(int idx = 0 ; idx < term_frequency ; idx++)
         {
             int doc_id, tf;
             iss >> doc_id >> tf;
+            // [TODO]
             std::vector<std::string> variable_bytes_doc_id = variable_byte_encoding(doc_id); // the type of encoding should be decided by CMD arguments
             std::vector<std::string> variable_bytes_tf = variable_byte_encoding(tf);
 
+
             for(auto byte_string : variable_bytes_doc_id)
             {
-                write_byte_string(postings_list_file, byte_string);
+                // write_byte_string(postings_list_file, byte_string);
+                byte_strings.push_back(byte_string);
             }
 
             for(auto byte_string : variable_bytes_tf)
             {
-                write_byte_string(postings_list_file, byte_string);
+                // write_byte_string(postings_list_file, byte_string);
+                byte_strings.push_back(byte_string);
             }            
             total_bytes_written += variable_bytes_doc_id.size() + variable_bytes_tf.size();
         }
+        write_multiple_byte_strings(postings_list_file, byte_strings);
     }
 
     uncomprssed_postings_file.close();
@@ -372,7 +414,7 @@ int main(int argc, char *argv[]) {
                 for(char &ch : document_content)
                     ch = tolower(ch);
                 std::vector<std::string> tokens = tokenizer.tokenize(document_content);
-                std::map<std::string, int> token_counts;
+                std::unordered_map<std::string, int> token_counts;
                 for(auto const &token : tokens) token_counts[token] += 1;
                 for(auto const &pr : token_counts)
                 {
@@ -395,9 +437,9 @@ int main(int argc, char *argv[]) {
 
 
     // Stop the clock and print the execution time
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::seconds>(end - start);
-    std::cout << "Execution time: " << duration.count() << " seconds" << std::endl;
+    end = std::chrono::high_resolution_clock::now();
+    duration = std::chrono::duration_cast<std::chrono::seconds>(end - start);
+    std::cout << "Execution time for Creating Postings List and Vocabulary File: " << duration.count() << " seconds" << std::endl;
 
     return 0;
 }

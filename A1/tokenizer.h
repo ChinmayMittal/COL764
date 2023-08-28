@@ -17,14 +17,14 @@ class SimpleTokenizer
 
 };
 
-struct VectorHash {
-    template <typename T>
-    size_t operator()(const std::vector<T>& v) const {
-        size_t seed = v.size();
-        for (const T& elem : v) {
-            seed ^= std::hash<T>()(elem) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-        }
-        return seed;
+struct PairHash {
+    size_t operator()(const std::pair<std::string, std::string>& p) const {
+        // Use std::hash for each string and combine the results
+        size_t hash1 = std::hash<std::string>{}(p.first);
+        size_t hash2 = std::hash<std::string>{}(p.second);
+
+        // A common hash combining technique
+        return hash1 ^ (hash2 << 1);
     }
 };
 
@@ -34,18 +34,18 @@ class BPETokenizer
     private:
         std::set<char> delimiters;
         int max_iterations;
-        std::unordered_map<std::string, uint64_t> word_frequency;
+        int total_initial_merges;
+        std::unordered_map<std::string, uint32_t> word_frequency;
         std::unordered_map<std::string, std::vector<std::string>> splits;
-        std::vector<std::string> vocabulary;
         SimpleTokenizer pretokenizer;
-        std::unordered_map<std::vector<std::string>, uint64_t, VectorHash> compute_pair_frequencies();
-        std::vector<std::vector<std::string>> merges;
+        std::unordered_map<std::pair<std::string, std::string>, uint32_t, PairHash> compute_pair_frequencies();
+        std::vector<std::pair<std::string, std::string>> merges;
         void merge_pair(std::string &first, std::string &second);
 
     public:
         BPETokenizer(const std::set<char>& delimiters, int max_iter);
-        void train(std::vector<std::string> &corpus);
-        void train(const std::string training_directory,const std::string output_file_path);
+        void train(std::vector<std::string> &corpus, const std::string &output_file_path, bool write_intermediate);
+        void train(const std::string training_directory,const std::string output_file_path, const std::string initial_merges_file_path);
         std::vector<std::string> tokenize(std::string text);
 
 

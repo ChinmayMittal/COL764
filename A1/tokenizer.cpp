@@ -3,6 +3,7 @@
 #include <fstream>
 #include <chrono>
 #include <unordered_map>
+#include <sstream>
 
 # include "tokenizer.h"
 #include "document.h"
@@ -66,23 +67,29 @@ BPETokenizer::BPETokenizer(const std::set<char>& delimiters, int max_iter):
 
 }
 
-
-std::unordered_map<std::vector<std::string>, uint64_t, VectorHash> BPETokenizer::compute_pair_frequencies()
+std::unordered_map<std::pair<std::string, std::string>, uint32_t, PairHash> BPETokenizer::compute_pair_frequencies()
 {
-    std::unordered_map<std::vector<std::string>, uint64_t, VectorHash> pair_frequencies;
+    std::unordered_map<std::pair<std::string, std::string>, uint32_t, PairHash>pair_frequencies;
+    std::vector<std::string> words_to_be_deleted;
     for(auto const &pair : word_frequency)
     {
         const std::string &word = pair.first;
-        uint64_t frequency = pair.second;
+        uint32_t frequency = pair.second;
         std::vector<std::string> &current_word_split = splits[word];
         if(current_word_split.size() > 1)
         {
             for(int idx = 0; idx < current_word_split.size()-1; idx++)
             {
-                std::vector<std::string> vocab_pair{current_word_split[idx], current_word_split[idx+1]};
-                pair_frequencies[vocab_pair] += frequency;
+                pair_frequencies[std::make_pair(current_word_split[idx], current_word_split[idx+1])] += frequency;
             }
+        }else{
+            words_to_be_deleted.push_back(word);
         }
+    }
+    for(const auto &word : words_to_be_deleted)
+    {
+        word_frequency.erase(word_frequency.find(word));
+        splits.erase(splits.find(word));
     }
     return pair_frequencies;
 }
@@ -110,7 +117,7 @@ void BPETokenizer::merge_pair(std::string &first, std::string &second)
     }
 }
 
-void BPETokenizer::train(std::vector<std::string> &corpus)
+void BPETokenizer::train(std::vector<std::string> &corpus, const std::string &output_file_path, bool write_intermediate)
 {
     // compute word frequencies
     for(auto const &text : corpus)
@@ -122,45 +129,52 @@ void BPETokenizer::train(std::vector<std::string> &corpus)
         }
     }
     std::cout << "Computed Word Frequencies\n" ;
-    // compute initial alphabet
-    std::set<std::string> alphabets;
-    for(auto const &pr : word_frequency)
-    {
-        for(int idx = 0; idx < pr.first.size() ; idx++)
-        {
-            alphabets.insert(pr.first.substr(idx,1));
-        }
-    }
-    vocabulary.push_back("<E>");
-    for(auto const &alphabet: alphabets)
-    {
-        vocabulary.push_back(alphabet);
-    }
-    std::cout << "Computed Initial Vocabulary\n";
+
     // split each word
     for(auto const &pr : word_frequency)
     {
-        std::string word = pr.first;
+        const std::string &word = pr.first;
         for(int idx = 0; idx < word.size() ; idx++)
         {
             splits[word].push_back(word.substr(idx,1));
-            // std::cout << word.substr(idx, 1)  << "--"<< std::endl;
         }
     }
     std::cout << "Computed Initial Word Splits\n" ;
 
-    uint32_t iter = 0;
+    if(merges.size())
+    {
+        // initial merges exist
+        for(int merge_idx = 0; merge_idx < merges.size(); merge_idx++)
+        {
+            merge_pair(merges[merge_idx].first, merges[merge_idx].second);
+            if(merge_idx % 100 == 0) 
+                std::cout << "Processed " << merge_idx << " initial merges" << std::endl;
+        }
+        std::ofstream merge_file(output_file_path, std::ios::out | std::ios::app);
+        if(!merge_file)
+        {
+            std::cerr << "Cannot open output file \n";
+            return ;
+        }
+        for(int merge_idx = 0; merge_idx < merges.size() ; merge_idx ++)
+        {
+            merge_file << merges[merge_idx].first << " " << merges[merge_idx].second << "\n";
+        }
+        merges.clear();
+        merge_file.close();
 
-    while(iter < max_iterations)
+
+        std:: cout << "Processed Initial Merges\n";
+    }
+    uint32_t iter = 0;
+    while(iter < max_iterations - total_initial_merges)
     {
         if(iter % 10 == 0)
-        {
             std::cout  << iter << "\n" ;
-        }
         auto start = std::chrono::high_resolution_clock::now();
-        std::unordered_map<std::vector<std::string>, uint64_t, VectorHash> pair_frequencies = compute_pair_frequencies();
-        std::vector<std::string> most_frequent_pair;
-        uint64_t most_frequent_pair_count = 0;
+        std::unordered_map<std::pair<std::string, std::string>, uint32_t, PairHash> pair_frequencies = compute_pair_frequencies();
+        std::pair<std::string, std::string> most_frequent_pair;
+        uint32_t most_frequent_pair_count = 0;
         for(auto &pr : pair_frequencies)
         {
             if(pr.second > most_frequent_pair_count)
@@ -171,37 +185,96 @@ void BPETokenizer::train(std::vector<std::string> &corpus)
         }
         auto end = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end-start);
-        std::cout << "Time taken by MFP Calc: " << duration.count() << " milliseconds" << std::endl ;
+        if(iter % 10 == 0) std::cout << "Time taken by MFP Calc: " << duration.count() << " milliseconds" << std::endl ;
         if(most_frequent_pair_count == 0)
         {
             break;
         }
-        // std::cout << most_frequent_pair[0] << " " << most_frequent_pair[1] << " " << most_frequent_pair_count << "\n" ;
-        merges.push_back(most_frequent_pair);
-        vocabulary.push_back(most_frequent_pair[0] + most_frequent_pair[1]);
+        merges.push_back(std::make_pair(most_frequent_pair.first, most_frequent_pair.second));
         start = std::chrono::high_resolution_clock::now();
-        merge_pair(most_frequent_pair[0], most_frequent_pair[1]);
+        merge_pair(most_frequent_pair.first, most_frequent_pair.second);
         end = std::chrono::high_resolution_clock::now();
         duration = std::chrono::duration_cast<std::chrono::milliseconds>(end-start);
-        std::cout << "Time taken by Merge Pair Calc: " << duration.count() << " milliseconds" << std::endl ;
+        if(iter % 10 == 0)  std::cout << "Time taken by Merge Pair Calc: " << duration.count() << " milliseconds" << std::endl ;
         iter += 1;
+
+        // write the current merges to a file
+        if(write_intermediate and iter % 250 == 0)
+        {
+            std::ofstream merge_file(output_file_path, std::ios::out | std::ios::app);
+            if(!merge_file)
+            {
+                std::cerr << "Cannot open output file \n";
+                return ;
+            }
+            for(int merge_idx = 0; merge_idx < merges.size() ; merge_idx ++)
+            {
+                merge_file << merges[merge_idx].first << " " << merges[merge_idx].second << "\n";
+            }
+            merges.clear();
+            merge_file.close();
+        }
     }
+
+    
+    // write the remaining merges to a file
+    std::ofstream merge_file(output_file_path, std::ios::out | std::ios::app);
+    if(!merge_file)
+    {
+        std::cerr << "Cannot open output file \n";
+        return ;
+    }
+    for(int merge_idx = 0; merge_idx < merges.size() ; merge_idx ++)
+    {
+        merge_file << merges[merge_idx].first << " " << merges[merge_idx].second << "\n";
+    }
+    merges.clear();
+    merge_file.close();
+
 
 }
 
-void BPETokenizer::train(const std::string training_directory,const std::string output_file_path)
+void BPETokenizer::train(const std::string training_directory,const std::string output_file_path, const std::string initial_merges_file_path)
 {
     std::vector<std::string> corpus;
     std::vector<fs::path> non_text_files;
+
+    // load initial merges
+    if(initial_merges_file_path != "")
+    {
+        std::cout << "Loading initial merges \n" ;
+        std::ifstream initial_merges_file(initial_merges_file_path);
+        if(! initial_merges_file)
+        {
+            std::cerr << "Cannot open initial merge file " << initial_merges_file_path << std::endl;
+            return;
+        }
+        std::string line;
+        unsigned int total_initial_merges = 0;
+        while(std::getline(initial_merges_file, line))
+        {
+            std::istringstream iss(line);
+            std::string first_string, second_string;
+            iss >> first_string >> second_string;
+            merges.push_back(std::make_pair(first_string, second_string));
+            total_initial_merges ++ ;
+        }
+        this->total_initial_merges = total_initial_merges;
+        initial_merges_file.close();
+    }
+    else
+    {
+        this->total_initial_merges = 0;
+    }
     getNonTextFilesRecursively(training_directory, non_text_files);
-    for(int idx = 0; idx < non_text_files.size(); idx += 5) // prune dataset
+    for(int idx = 0; idx < non_text_files.size(); idx += 3) // prune dataset
     {
         if(idx % 25 == 0 )
         {
             std::cout << idx << std::endl ;
         }
         std::vector<Document> documents = parse_file(non_text_files[idx]);
-        for(int doc_idx = 0; doc_idx < documents.size(); doc_idx += 10) // prune dataset
+        for(int doc_idx = 0; doc_idx < documents.size(); doc_idx += 5) // prune dataset
         {
             std::string document_string = documents[doc_idx].title + " " + documents[doc_idx].content;
             for(auto & ch : document_string)
@@ -210,18 +283,7 @@ void BPETokenizer::train(const std::string training_directory,const std::string 
         }
     }
     std::cout << "Corpus Collected, Training ...\n";
-    train(corpus);
-    std::ofstream merge_file(output_file_path, std::ios::out | std::ios::trunc);
-    if(!merge_file)
-    {
-        std::cerr << "Cannot open output file \n";
-        return ;
-    }
-    for(int merge_idx = 0; merge_idx < merges.size() ; merge_idx ++)
-    {
-        merge_file << merges[merge_idx][0] << " " << merges[merge_idx][1] << "\n";
-    }
-    merge_file.close();
+    train(corpus, output_file_path, true);
 }
 
 std::vector<std::string> BPETokenizer::tokenize(std::string text)
@@ -240,7 +302,7 @@ std::vector<std::string> BPETokenizer::tokenize(std::string text)
 
     for (auto const& merge : merges)
     {
-        const std::string &first_string = merge[0], &second_string = merge[1];
+        const std::string &first_string = merge.first, &second_string = merge.second;
         for(int word_idx = 0; word_idx < splits.size(); ++word_idx)
         {
             uint32_t idx = 0;
@@ -272,7 +334,7 @@ std::vector<std::string> BPETokenizer::tokenize(std::string text)
 
 int main(int argc, char* argv[])
 {
-    BPETokenizer tokenizer(std::set<char>{'.', ' ', ':', ';', '\"', '\'', '.', '?', '!', ',', '\n'}, 10000);
+    BPETokenizer tokenizer(std::set<char>{'.', ' ', ':', ';', '\"', '\'', '.', '?', '!', ',', '\n'}, 500);
     // std::vector<std::string> corpus;
     // corpus.push_back("This is part of the information retreival course");
     // corpus.push_back("My name is chinmay");
@@ -280,11 +342,11 @@ int main(int argc, char* argv[])
     // corpus.push_back("Tokenization algorithm using byte pair encoding");
 
     // tokenizer.train(corpus);
-    tokenizer.train("./train_data/f1", "bpe_merges");
+    tokenizer.train("./train_data/", "bpe_merges", "./data_files/bpe_merges");
     std::string text = "This, is the \'text\' I want to tokenize; My name is:chinmay. "; 
-    std::vector<std::string> tokens = tokenizer.tokenize(text);
-    for(auto token : tokens)
-        std::cout << "-->" << token << "\n" ;
+    // std::vector<std::string> tokens = tokenizer.tokenize(text);
+    // for(auto token : tokens)
+    //     std::cout << "-->" << token << "\n" ;
 
 
     return 0;
