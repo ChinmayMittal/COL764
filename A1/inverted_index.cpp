@@ -177,6 +177,20 @@ std::vector<std::string>  variable_byte_encoding(int num)
     return variable_bytes;
 };
 
+std::vector<std::string> fixed_byte_encoding(int number)
+{
+    std::vector<std::string> fixed_bytes;
+    for (int i = 0; i < 4; ++i) {
+        // Extract each byte from the integer, starting from the least significant byte
+        unsigned char byte = (number >> (i * 8)) & 0xFF;
+        std::bitset<8> bits(byte);
+        fixed_bytes.push_back(bits.to_string());
+    }
+    return fixed_bytes;
+}
+
+
+
 void write_byte_string(std::ofstream &postings_list_file, std::string &byte_string)
 {
     unsigned char byte = 0;
@@ -211,13 +225,15 @@ int main(int argc, char *argv[]) {
     /*
     Command line arguments for type of tokenizer and the type of compression 
     */
-    if(argc <=2)
+    if(argc <=3)
     {
-        std::cout << "Requires Training Directory as Script Argument and Tokenizer Type" << std::endl;
+        std::cout << "Requires Training Directory as Script Argument and Tokenizer and Compression Type" << std::endl;
         return 0;
     }
     std::string directory_path = argv[1];
-    int tokenizer_arg = std::stoi(argv[2]);
+    int compression_arg = std::stoi(argv[2]);
+    int tokenizer_arg = std::stoi(argv[3]);
+    assert(compression_arg == 0 || compression_arg == 1);
     assert(tokenizer_arg == 0 || tokenizer_arg == 1);
 
     std::string temporary_directory_path = "./temp"; // temporary directory used to store files
@@ -232,7 +248,7 @@ int main(int argc, char *argv[]) {
         std::cout << "Failed to create directory." << std::endl;
     }
     std::cout << "Training Directory: " << directory_path << std::endl;
-
+    std::cout << (compression_arg ? "Compression" : "No Compression") << std::endl;
     Tokenizer* tokenizer = nullptr;
     if(tokenizer_arg == 0)
     {
@@ -369,7 +385,12 @@ int main(int argc, char *argv[]) {
     }
 
     std::string line;
-    int total_bytes_written =0;
+    // write the tokenizer type and compression type to the postings list file
+    char byte_value = static_cast<char>(compression_arg);
+    postings_list_file.write(&byte_value, sizeof(byte_value));
+    byte_value = static_cast<char>(tokenizer_arg);
+    postings_list_file.write(&byte_value, sizeof(byte_value));
+    int total_bytes_written = 2;
 
     std::unordered_map<unsigned int, float> normalized_document_vector_norms; // store the normalized document vector norms
     while(std::getline(uncomprssed_postings_file, line)) // iterates over the vocabulary and the corresponding postings list
@@ -393,17 +414,27 @@ int main(int argc, char *argv[]) {
             // [TODO] implement no compression 
             doc_id_to_be_stored = previous_value != -1 ? doc_id - previous_value : doc_id; // gap encoding
             previous_value = doc_id;
-            std::vector<std::string> variable_bytes_doc_id = variable_byte_encoding(doc_id_to_be_stored); // the type of encoding should be decided by CMD arguments
-            std::vector<std::string> variable_bytes_tf = variable_byte_encoding(tf);
+            std::vector<std::string> bytes_doc_id, bytes_tf;
+            if(compression_arg == 1)
+            {
+                // Variable Byte Encoding
+                bytes_doc_id = variable_byte_encoding(doc_id_to_be_stored);
+                bytes_tf = variable_byte_encoding(tf);
+            }else if(compression_arg == 0)
+            {
+                // Fixed Byte Encoding
+                bytes_doc_id = fixed_byte_encoding(doc_id);
+                bytes_tf = fixed_byte_encoding(tf);
+            }
             previous_value = doc_id;
 
-            for(auto byte_string : variable_bytes_doc_id)
+            for(auto byte_string : bytes_doc_id)
                 byte_strings.push_back(byte_string);
 
-            for(auto byte_string : variable_bytes_tf)
+            for(auto byte_string : bytes_tf)
                 byte_strings.push_back(byte_string);
                       
-            total_bytes_written += variable_bytes_doc_id.size() + variable_bytes_tf.size();
+            total_bytes_written += bytes_doc_id.size() + bytes_tf.size();
 
             // update the document vector norms
             float document_vector_element = inverse_document_frequency(term_doc_frequency, document_cnt) * tf;

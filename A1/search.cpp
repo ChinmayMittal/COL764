@@ -77,7 +77,17 @@ void read_variable_byte(std::ifstream &postings_file, int &num)
     }
 }
 
-std::vector<std::pair<int, int>> get_postings_list(std::string postings_file_path, int byte_offset, int postings_list_length)
+void read_fixed_bytes(std::ifstream &postings_file, int &num)
+{
+    num = 0;
+    for (int i = 0; i < 4; ++i) {
+        unsigned char byte;
+        postings_file.read(reinterpret_cast<char*>(&byte), sizeof(byte));
+        num |= (static_cast<int>(byte) << (i * 8));
+    }
+}
+
+std::vector<std::pair<int, int>> get_postings_list(std::string postings_file_path, int byte_offset, int postings_list_length, int compression_type)
 {
     std::vector<std::pair<int, int>> postings_list;
     std::ifstream postings_file(postings_file_path, std::ios::binary); // Open the binary file in binary mode
@@ -88,15 +98,29 @@ std::vector<std::pair<int, int>> get_postings_list(std::string postings_file_pat
 
     postings_file.seekg(byte_offset, std::ios::beg);
 
-    int last_doc_id = 0;
-    for(int idx = 0 ; idx < postings_list_length ; idx ++)
+    if(compression_type == 1)
     {
-        int document_id=0, term_frequency=0;
-        read_variable_byte(postings_file, document_id);
-        read_variable_byte(postings_file, term_frequency);
-        document_id = last_doc_id + document_id; // gap encoding
-        last_doc_id = document_id;
-        postings_list.push_back({document_id, term_frequency});
+        // Variable Byte Encoding
+        int last_doc_id = 0;
+        for(int idx = 0 ; idx < postings_list_length ; idx ++)
+        {
+            int document_id=0, term_frequency=0;
+            read_variable_byte(postings_file, document_id);
+            read_variable_byte(postings_file, term_frequency);
+            document_id = last_doc_id + document_id; // gap encoding
+            last_doc_id = document_id;
+            postings_list.push_back({document_id, term_frequency});
+        }
+    }
+    else if (compression_type == 0){
+        // Fixed Byte Encoding
+        for(int idx = 0 ; idx < postings_list_length ; idx ++)
+        {
+            int document_id=0, term_frequency=0;
+            read_fixed_bytes(postings_file, document_id);
+            read_fixed_bytes(postings_file, term_frequency);
+            postings_list.push_back({document_id, term_frequency});
+        }
     }
     return postings_list;
 }
@@ -104,14 +128,13 @@ std::vector<std::pair<int, int>> get_postings_list(std::string postings_file_pat
 int main(int argc, char* argv[])
 {
     auto start = std::chrono::high_resolution_clock::now();
-    if(argc < 4)
+    if(argc < 3)
     {
-        std::cout << "Script Requires Query File and Output File paths and Tokenize Type\n";
+        std::cout << "Script Requires Query File and Output File paths\n";
         return 1;
     }
     std::string query_file_path = argv[1];
     std::string output_file_path = argv[2];
-    int tokenizer_arg = std::stoi(argv[3]);
     std::cout << "Query File: " << query_file_path << "\n";
     std::cout << "Output File path: " << output_file_path << "\n";
 
@@ -122,6 +145,20 @@ int main(int argc, char* argv[])
         std::cerr << "Unable to open file for writing";
         return 1;
     }
+
+    // get the arguments of compression from the postings file
+    std::ifstream postings_file("postings", std::ios::binary); // Open the binary file in binary mode
+    if (!postings_file.is_open()) {
+        std::cerr << "Failed to open the postings file." << std::endl;
+        return 1;
+    }
+    char byte_value;
+    postings_file.read(&byte_value, sizeof(byte_value));
+    int compresion_arg = static_cast<int>(byte_value);
+    postings_file.read(&byte_value, sizeof(byte_value));
+    int tokenizer_arg = static_cast<int>(byte_value);
+    postings_file.close();
+    std::cout << (compresion_arg ? "Compression" : "No Compression") << std::endl;
 
     // settup tokenizer
     Tokenizer* tokenizer = nullptr;
@@ -234,7 +271,7 @@ int main(int argc, char* argv[])
             byte_offset = vocab_dict[query_term].second;
             if((float)document_frequency > 0.1 * total_document_count && total_document_count > 1e4) // ignore common words if large collection size
                 continue;
-            std::vector<std::pair<int, int>>postings_list = get_postings_list("postings", byte_offset, document_frequency);
+            std::vector<std::pair<int, int>>postings_list = get_postings_list("postings", byte_offset, document_frequency, compresion_arg);
             for(auto const &pr : postings_list)
             {
                 int document_id = pr.first;
