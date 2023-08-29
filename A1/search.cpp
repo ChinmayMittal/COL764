@@ -88,11 +88,14 @@ std::vector<std::pair<int, int>> get_postings_list(std::string postings_file_pat
 
     postings_file.seekg(byte_offset, std::ios::beg);
 
+    int last_doc_id = 0;
     for(int idx = 0 ; idx < postings_list_length ; idx ++)
     {
         int document_id=0, term_frequency=0;
         read_variable_byte(postings_file, document_id);
         read_variable_byte(postings_file, term_frequency);
+        document_id = last_doc_id + document_id; // gap encoding
+        last_doc_id = document_id;
         postings_list.push_back({document_id, term_frequency});
     }
     return postings_list;
@@ -229,7 +232,7 @@ int main(int argc, char* argv[])
                 continue; // ignore query term if not in are in vocabulary
             document_frequency = vocab_dict[query_term].first;
             byte_offset = vocab_dict[query_term].second;
-            if((float)document_frequency > 0.1 * total_document_count) // ignore common words
+            if((float)document_frequency > 0.1 * total_document_count && total_document_count > 1e4) // ignore common words if large collection size
                 continue;
             std::vector<std::pair<int, int>>postings_list = get_postings_list("postings", byte_offset, document_frequency);
             for(auto const &pr : postings_list)
@@ -240,9 +243,6 @@ int main(int argc, char* argv[])
                                                 * inverse_document_frequency(document_frequency, total_document_count) * inverse_document_frequency(document_frequency, total_document_count);
                 document_term_counts[document_id] += 1;
             }
-
-    
-            vocab_file.close();
         }
         for(auto &pr : document_scores)
             pr.second /= normalized_document_vector_norms[pr.first];

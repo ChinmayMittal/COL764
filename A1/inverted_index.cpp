@@ -383,15 +383,19 @@ int main(int argc, char *argv[]) {
         
         
         // write the posting list as bytes
+        int previous_value = -1;
         std::vector<std::string> byte_strings;
         for(int idx = 0 ; idx < term_doc_frequency ; idx++)
         {
-            int doc_id, tf;
+            int doc_id, tf, doc_id_to_be_stored;
             iss >> doc_id >> tf;
 
             // [TODO] implement no compression 
-            std::vector<std::string> variable_bytes_doc_id = variable_byte_encoding(doc_id); // the type of encoding should be decided by CMD arguments
+            doc_id_to_be_stored = previous_value != -1 ? doc_id - previous_value : doc_id; // gap encoding
+            previous_value = doc_id;
+            std::vector<std::string> variable_bytes_doc_id = variable_byte_encoding(doc_id_to_be_stored); // the type of encoding should be decided by CMD arguments
             std::vector<std::string> variable_bytes_tf = variable_byte_encoding(tf);
+            previous_value = doc_id;
 
             for(auto byte_string : variable_bytes_doc_id)
                 byte_strings.push_back(byte_string);
