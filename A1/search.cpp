@@ -100,16 +100,19 @@ std::vector<std::pair<int, int>> get_postings_list(std::string postings_file_pat
 
 int main(int argc, char* argv[])
 {
-    if(argc < 3)
+    auto start = std::chrono::high_resolution_clock::now();
+    if(argc < 4)
     {
-        std::cout << "Script Requires Query File and Output File paths\n";
+        std::cout << "Script Requires Query File and Output File paths and Tokenize Type\n";
         return 1;
     }
     std::string query_file_path = argv[1];
     std::string output_file_path = argv[2];
+    int tokenizer_arg = std::stoi(argv[3]);
     std::cout << "Query File: " << query_file_path << "\n";
     std::cout << "Output File path: " << output_file_path << "\n";
 
+    // settup file to write the output
     std::ofstream output_file;
     output_file.open(output_file_path, std::ios::out | std::ios::trunc);
     if (!output_file) {  // Check if the file was opened successfully
@@ -117,11 +120,22 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    SimpleTokenizer tokenizer(std::set<char>{'.', ' ', ':', ';', '\"', '\'', '.', '?', '!', ',', '\n'});
+    // settup tokenizer
+    Tokenizer* tokenizer = nullptr;
+    if(tokenizer_arg == 0)
+    {
+        std::cout  << "Simple Tokenizer\n";
+        tokenizer = new SimpleTokenizer(get_base_delimiters());
+    }else{
+        std::cout << "BPE Tokenizer\n";
+        tokenizer = new BPETokenizer(get_base_delimiters(), "./bpe_merges");
+    }
 
     // read the query files and get all queries
     std::vector<Query> queries = parseQueries(query_file_path);
 
+
+    // store the vocabulary
     std::map<std::string, std::pair<int,int>> vocab_dict; // term --> <doc_freq, byte_offset>
     std::ifstream vocab_file("vocabulary"); // find a more effecient way to do this
     if(!vocab_file)
@@ -141,6 +155,8 @@ int main(int argc, char* argv[])
         iss >> document_frequency >> byte_offset;
         vocab_dict[vocab_term] = std::make_pair(document_frequency, byte_offset);
     }
+    std::cout << "Loaded Vocabulary\n";
+
     // store document mappings
     std::unordered_map<int, std::string> document_idx_to_id;
     std::unordered_map<int, float> normalized_document_vector_norms;
@@ -157,19 +173,51 @@ int main(int argc, char* argv[])
         normalized_document_vector_norms[document_idx] = document_vector_norm;
     }
     vocab_file.close();
-    // // tokenize the query
-
+    std::cout << "Loaded Document Mappings\n";
+    
+    // tokenize the query
+    unsigned int queries_processed = 0;
     for(auto const &query : queries)
     {
-        std::string query_content = query.title + " " + query.description ; // create query content only using title and description
+        print_progress(queries_processed++, queries.size());
+        std::string query_title = query.title;
+        std::string query_content = query.description;
+        for(auto &ch : query_title) ch = tolower(ch); // convert to lower case
         for(auto &ch : query_content) ch = tolower(ch); // convert to lower case
-        std::vector<std::string> query_tokens = tokenizer.tokenize(query_content);
+        // treat quert title and content differently
+        std::vector<std::string> query_title_tokens = tokenizer->tokenize(query_title);
+        std::vector<std::string> query_content_tokens = tokenizer->tokenize(query_content);
+
+        // Sort the vector of strings using a lambda function
+        std::sort(query_content_tokens.begin(), query_content_tokens.end(), [&vocab_dict](const std::string& a, const std::string& b) {
+            int a_count = vocab_dict.count(a);
+            int b_count = vocab_dict.count(b);
+            if(a_count != b_count)
+            {
+                return a_count > b_count; // token in our vocab comes first
+            }
+            if(a_count && b_count)
+            {
+                return vocab_dict[a].first < vocab_dict[b].first ; // token with smaller document count comes first 
+            }
+            return true;
+        });   
+
         std::map<std::string, int> query_token_cnt;
-        for(auto const &token: query_tokens)
+        for(auto const &token: query_title_tokens)
             query_token_cnt[token] += 1;
+
+        int content_tokens_to_consider = std::max((int)query_content_tokens.size()/4, 10);
+        if(content_tokens_to_consider > query_content_tokens.size()) content_tokens_to_consider = query_content_tokens.size();
+        for(int idx = 0; idx < content_tokens_to_consider; idx++)
+        {
+            query_token_cnt[query_content_tokens[idx]] += 1;
+            if(query.number == 372)
+            std::cout << query_content_tokens[idx] << std::endl;
+        }
         
-        std::vector<float> document_scores(total_document_count, 0); // final document scores for this query
-        std::vector<int> document_term_counts(total_document_count, 0); // count of query terms in the document
+        std::unordered_map<int, float> document_scores; // final document scores for this query idx --> score
+        std::unordered_map<int, float> document_term_counts; // count of query terms in the document idx --> count
 
         for(auto const & query_token_pair : query_token_cnt)
         {
@@ -184,7 +232,8 @@ int main(int argc, char* argv[])
                 continue; // ignore query term if not in are in vocabulary
             document_frequency = vocab_dict[query_term].first;
             byte_offset = vocab_dict[query_term].second;
-            std::cout << document_frequency << " " << byte_offset << std::endl;
+            if((float)document_frequency > 0.1 * total_document_count) // ignore common words
+                continue;
             std::vector<std::pair<int, int>>postings_list = get_postings_list("postings", byte_offset, document_frequency);
             for(auto const &pr : postings_list)
             {
@@ -199,23 +248,27 @@ int main(int argc, char* argv[])
             vocab_file.close();
         }
         // need to normalize document scores [TODO]
-        for(int idx = 0; idx < document_scores.size(); idx++) document_scores[idx] /= normalized_document_vector_norms[idx];
+        // for(int idx = 0; idx < document_scores.size(); idx++) document_scores[idx] /= normalized_document_vector_norms[idx];
+        for(auto &pr : document_scores)
+        {
+            pr.second /= normalized_document_vector_norms[pr.first];
+        }
 
         // get the best documents
         // min heap for this purpose stores <score, id> for the best documents
         std::priority_queue<std::pair<float, int>, std::vector<std::pair<float, int>>, std::greater<std::pair<float, int>>> minHeap;
-        int best_k = 10; // to be experimented with
-        for(int document_idx = 0; document_idx < document_scores.size(); ++document_idx)
+        int best_k = 100;
+        for(auto &pr : document_scores)
         {
             if(minHeap.size() < best_k)
             {
-                minHeap.push({document_scores[document_idx], document_idx});
+                minHeap.push({document_scores[pr.first], pr.first});
             }else{
-                if(minHeap.top().first < document_scores[document_idx])
+                if(minHeap.top().first < document_scores[pr.first])
                 {
                     // replace min heap elements
                     minHeap.pop();
-                    minHeap.push({document_scores[document_idx], document_idx});
+                    minHeap.push({document_scores[pr.first], pr.first});
                 }
             }
         }
@@ -228,11 +281,17 @@ int main(int argc, char* argv[])
         }
 
         for(int idx = best_documents.size()-1 ; idx >= 0 ; idx--) {
-            output_file << query.number << " 0 " << document_idx_to_id[best_documents[idx]]  << " " << 1 << "\n";
+            output_file << query.number << " 0 " << document_idx_to_id[best_documents[idx]]  << " " << document_scores[best_documents[idx]] << "\n";
         }
     }
 
     output_file.close();
+
+
+    // Calculate the elapsed time
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::seconds>(end - start).count();
+    std::cout << "Function took " << duration << " seconds." << std::endl;
 
     return 0;
 }

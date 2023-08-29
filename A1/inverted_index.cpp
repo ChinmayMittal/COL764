@@ -211,12 +211,15 @@ int main(int argc, char *argv[]) {
     /*
     Command line arguments for type of tokenizer and the type of compression 
     */
-    if(argc <=1)
+    if(argc <=2)
     {
-        std::cout << "Requires Training Directory as Script Argument" << std::endl;
+        std::cout << "Requires Training Directory as Script Argument and Tokenizer Type" << std::endl;
         return 0;
     }
     std::string directory_path = argv[1];
+    int tokenizer_arg = std::stoi(argv[2]);
+    assert(tokenizer_arg == 0 || tokenizer_arg == 1);
+
     std::string temporary_directory_path = "./temp"; // temporary directory used to store files
     std::string vocabulary;
     // Start the clock
@@ -228,9 +231,18 @@ int main(int argc, char *argv[]) {
     } else {
         std::cout << "Failed to create directory." << std::endl;
     }
-
     std::cout << "Training Directory: " << directory_path << std::endl;
-    SimpleTokenizer tokenizer(std::set<char>{'.', ' ', ':', ';', '\"', '\'', '.', '?', '!', ',', '\n'}); // this tokenizer should be chosen accordign to CMD args
+
+    Tokenizer* tokenizer = nullptr;
+    if(tokenizer_arg == 0)
+    {
+        std::cout  << "Simple Tokenizer\n";
+        tokenizer = new SimpleTokenizer(get_base_delimiters());
+    }else{
+        std::cout << "BPE Tokenizer\n";
+        tokenizer = new BPETokenizer(get_base_delimiters(), "./bpe_merges");
+    }
+
     std::unordered_map<std::string, int> docId_to_idx;
     std::map<std::string, std::vector<std::pair<int, int>>> postings_list; // term --> list[doc_idx, term_frequency], map is required since we want the vocabulary to be sorted
     int document_cnt = 0;
@@ -253,7 +265,7 @@ int main(int argc, char *argv[]) {
                 std::string document_content = doc.title + " " + doc.content;
                 for(char &ch : document_content)
                     ch = tolower(ch);
-                std::vector<std::string> tokens = tokenizer.tokenize(document_content);
+                std::vector<std::string> tokens = tokenizer->tokenize(document_content);
                 std::unordered_map<std::string, int> token_counts;
                 for(auto const &token : tokens) token_counts[token] += 1;
                 for(auto const &pr : token_counts)
@@ -413,7 +425,7 @@ int main(int argc, char *argv[]) {
                 std::string document_content = doc.title + " " + doc.content;
                 for(char &ch : document_content)
                     ch = tolower(ch);
-                std::vector<std::string> tokens = tokenizer.tokenize(document_content);
+                std::vector<std::string> tokens = tokenizer->tokenize(document_content);
                 std::unordered_map<std::string, int> token_counts;
                 for(auto const &token : tokens) token_counts[token] += 1;
                 for(auto const &pr : token_counts)

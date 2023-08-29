@@ -2,6 +2,7 @@
 #include <vector>
 #include <fstream>
 #include <cmath>
+#include <set>
 
 #include "pugixml.hpp"
 #include "document.h"
@@ -67,4 +68,9 @@ float inverse_document_frequency(float document_frequency, float total_documents
 float term_frequency(float term_count)
 {
     return (term_count ? 1 + log2(term_count) : 0) ;
+}
+
+std::set<char> get_base_delimiters()
+{
+    return std::set<char>{'.' , ' ' , ':', ';', '\"', '\'', '.', '?', '!', ',', '\n'};
 }

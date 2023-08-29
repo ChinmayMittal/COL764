@@ -4,6 +4,7 @@
 #include <chrono>
 #include <unordered_map>
 #include <sstream>
+#include <list>
 
 # include "tokenizer.h"
 #include "document.h"
@@ -34,7 +35,7 @@ bool SimpleTokenizer::is_delimiter(char ch) const {
     return delimiters.find(ch) != delimiters.end();
 }
 
-std::vector<std::string> SimpleTokenizer::tokenize(const std::string& text) const {
+std::vector<std::string> SimpleTokenizer::tokenize(const std::string& text) {
     std::vector<std::string> tokens;
     size_t start = 0;
     size_t end = 0;
@@ -65,6 +66,27 @@ BPETokenizer::BPETokenizer(const std::set<char>& delimiters, int max_iter):
     pretokenizer(delimiters)
 {
 
+}
+
+BPETokenizer::BPETokenizer(const std::set<char>& delimiters, const std::string initial_merge_file):
+    delimiters(delimiters),
+    pretokenizer(delimiters)
+{
+    std::ifstream initial_merges(initial_merge_file);
+    if(!initial_merges)
+    {
+        std::cerr << "Cannot Load Initial Merge File " << std::endl;
+        return;
+    }
+    std::string line;
+    while(std::getline(initial_merges, line))
+    {
+        std::istringstream iss(line);
+        std::string first, second;
+        iss >> first >> second;
+        merges.push_back(std::make_pair(first, second));
+    }
+    initial_merges.close();
 }
 
 std::unordered_map<std::pair<std::string, std::string>, uint32_t, PairHash> BPETokenizer::compute_pair_frequencies()
@@ -286,68 +308,95 @@ void BPETokenizer::train(const std::string training_directory,const std::string 
     train(corpus, output_file_path, true);
 }
 
-std::vector<std::string> BPETokenizer::tokenize(std::string text)
+std::vector<std::string> BPETokenizer::tokenize(const std::string &text)
 {
     std::vector<std::string> pretokenized_text = pretokenizer.tokenize(text);
-    std::vector<std::vector<std::string>> splits;
+    std::unordered_map<std::string, std::list<std::string>> splits;
     for(auto const &word : pretokenized_text)
-    {
-        std::vector<std::string> split;
-        for(int idx = 0 ; idx < word.size() ; idx++)
+    {   
+        if(word_to_tokens.count(word) == 0 && splits.count(word) == 0) // we don't have mapping for this word
         {
-            split.push_back(word.substr(idx,1));
-        }
-        splits.push_back(split);
-    }
-
-    for (auto const& merge : merges)
-    {
-        const std::string &first_string = merge.first, &second_string = merge.second;
-        for(int word_idx = 0; word_idx < splits.size(); ++word_idx)
-        {
-            uint32_t idx = 0;
-            while(idx < splits[word_idx].size()-1)
+            for(int idx = 0 ; idx < word.size() ; idx++)
             {
-                if(splits[word_idx][idx] == first_string and splits[word_idx][idx+1]==second_string)
+                splits[word].push_back(word.substr(idx,1)); // create initial split
+            }
+        }
+    }
+    if(splits.size()) // word's exist for which we need to search merges
+    {
+        for (auto const& merge : merges) // will have to iterate over all merges to find right merges
+        {
+            const std::string &first_string = merge.first, &second_string = merge.second;
+            std::vector<std::string> words_done;
+            for(auto &pr : splits)
+            {
+                auto it = pr.second.begin();
+                while(it != pr.second.end())
                 {
-                    splits[word_idx].erase(splits[word_idx].begin() + idx, splits[word_idx].begin() + idx + 2);
-                    splits[word_idx].insert(splits[word_idx].begin() + idx, first_string + second_string);
-                }else{
-                    idx ++;
+                    if (*it == first_string && std::next(it) != pr.second.end() && *std::next(it) == second_string) {
+                        it = pr.second.erase(it, std::next(it, 2));
+                        pr.second.insert(it, first_string + second_string);
+                    } else {
+                        ++it;
+                    }
+                }
+                if(pr.second.size() == 1) // this word has been processed
+                {
+                    words_done.push_back(pr.first);
+                    word_to_tokens[pr.first].push_back(pr.second.front());
                 }
             }
-
+            for(auto &word : words_done)
+            {
+                splits.erase(word); // this words are fully processed and can be removed
+            }
+            if(splits.size() == 0) // no more words left to process no need to iterate remaining merges
+            {
+                break;
+            }
         }
     }
 
     std::vector<std::string> tokens;
-    for(auto &split : splits)
+    for(int word_index = 0; word_index < pretokenized_text.size(); ++word_index)
     {
-        for(auto &token : split)
+        std::string &word = pretokenized_text[word_index];
+        if(word_to_tokens.count(word))
         {
-            tokens.push_back(token);
+            for(auto &token : word_to_tokens[word])
+            {
+                tokens.push_back(token);
+            }
+        }
+        else{
+            for(auto &token : splits[word])
+            {
+                tokens.push_back(token);
+                word_to_tokens[word].push_back(token);
+            }
         }
     }
+    // std::cout << word_to_tokens.size() << std::endl;
     return tokens;
 
 }
 
-int main(int argc, char* argv[])
-{
-    BPETokenizer tokenizer(std::set<char>{'.', ' ', ':', ';', '\"', '\'', '.', '?', '!', ',', '\n'}, 500);
-    // std::vector<std::string> corpus;
-    // corpus.push_back("This is part of the information retreival course");
-    // corpus.push_back("My name is chinmay");
-    // corpus.push_back("This is a randomly generated sentence");
-    // corpus.push_back("Tokenization algorithm using byte pair encoding");
+// int main(int argc, char* argv[])
+// {
+//     BPETokenizer tokenizer(std::set<char>{'.', ' ', ':', ';', '\"', '\'', '.', '?', '!', ',', '\n'}, 500);
+//     // std::vector<std::string> corpus;
+//     // corpus.push_back("This is part of the information retreival course");
+//     // corpus.push_back("My name is chinmay");
+//     // corpus.push_back("This is a randomly generated sentence");
+//     // corpus.push_back("Tokenization algorithm using byte pair encoding");
 
-    // tokenizer.train(corpus);
-    tokenizer.train("./train_data/", "bpe_merges", "./data_files/bpe_merges");
-    std::string text = "This, is the \'text\' I want to tokenize; My name is:chinmay. "; 
-    // std::vector<std::string> tokens = tokenizer.tokenize(text);
-    // for(auto token : tokens)
-    //     std::cout << "-->" << token << "\n" ;
+//     // tokenizer.train(corpus);
+//     tokenizer.train("./train_data/", "bpe_merges", "./data_files/bpe_merges");
+//     std::string text = "This, is the \'text\' I want to tokenize; My name is:chinmay. "; 
+//     // std::vector<std::string> tokens = tokenizer.tokenize(text);
+//     // for(auto token : tokens)
+//     //     std::cout << "-->" << token << "\n" ;
 
 
-    return 0;
-}
+//     return 0;
+// }

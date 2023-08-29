@@ -4,7 +4,13 @@
 #include <map>
 #include <unordered_map>
 
-class SimpleTokenizer
+class Tokenizer {
+public:
+    virtual ~Tokenizer() {}
+    virtual std::vector<std::string> tokenize(const std::string& text) = 0;
+};
+
+class SimpleTokenizer : public Tokenizer
 {
     private:
         std::set<char> delimiters;
@@ -13,7 +19,7 @@ class SimpleTokenizer
     
     public:
         SimpleTokenizer(const std::set<char>& delimiters);
-        std::vector<std::string> tokenize(const std::string& text) const;
+        std::vector<std::string> tokenize(const std::string& text);
 
 };
 
@@ -29,7 +35,7 @@ struct PairHash {
 };
 
 
-class BPETokenizer
+class BPETokenizer : public Tokenizer
 {
     private:
         std::set<char> delimiters;
@@ -44,9 +50,11 @@ class BPETokenizer
 
     public:
         BPETokenizer(const std::set<char>& delimiters, int max_iter);
+        BPETokenizer(const std::set<char>& delimiters, const std::string initial_merge_file);
         void train(std::vector<std::string> &corpus, const std::string &output_file_path, bool write_intermediate);
         void train(const std::string training_directory,const std::string output_file_path, const std::string initial_merges_file_path);
-        std::vector<std::string> tokenize(std::string text);
+        std::unordered_map<std::string, std::vector<std::string>> word_to_tokens;
+        std::vector<std::string> tokenize(const std::string &text);
 
 
 };
