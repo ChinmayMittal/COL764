@@ -256,6 +256,7 @@ int main(int argc, char *argv[]) {
 
     int files_processed = 0;
     int temporary_file_count = 0;
+    unsigned int posting_file_bytes_estimate = 0;
     for (const auto &file : fs::directory_iterator(directory_path)) {
         print_progress(files_processed++, file_cnt);
         if (fs::is_regular_file(file)) {
@@ -273,14 +274,17 @@ int main(int argc, char *argv[]) {
                     const std::string &token = pr.first;
                     const int frequency = pr.second;
                     postings_list[token].push_back(std::make_pair(document_cnt, frequency));
+                    posting_file_bytes_estimate += 8;
                 }
                 docId_to_idx[doc.docID] = document_cnt ++;
             }
         }
 
-        if(files_processed % 100 == 0)
+        // 500 MB, limit to the posting list in RAM
+        if( posting_file_bytes_estimate + (10*postings_list.size()) >= 5e8) // improve this metric and reduce writes to disk
         {
             // write partial postings list to disk
+            posting_file_bytes_estimate = 0;
             std::string temporary_file = "./temp/temp-" + std::to_string(temporary_file_count++);
             posting_list_to_disk(postings_list, temporary_file);
 
@@ -367,40 +371,39 @@ int main(int argc, char *argv[]) {
     std::string line;
     int total_bytes_written =0;
 
-    std::unordered_map<std::string, unsigned int> term_to_document_count;
-    while(std::getline(uncomprssed_postings_file, line))
+    std::unordered_map<unsigned int, float> normalized_document_vector_norms; // store the normalized document vector norms
+    while(std::getline(uncomprssed_postings_file, line)) // iterates over the vocabulary and the corresponding postings list
     {
         std::istringstream iss(line);
         std::string term;
-        int term_frequency;
-        iss >> term >> term_frequency;
+        int term_doc_frequency;
+        iss >> term >> term_doc_frequency;
         // write term and its document count and the offset in the posting file to the vocabulary file
-        vocab_file << term << " " << term_frequency << " " << total_bytes_written << "\n" ;
-        term_to_document_count[term] = term_frequency;
+        vocab_file << term << " " << term_doc_frequency << " " << total_bytes_written << "\n" ;
+        
+        
         // write the posting list as bytes
-
         std::vector<std::string> byte_strings;
-        for(int idx = 0 ; idx < term_frequency ; idx++)
+        for(int idx = 0 ; idx < term_doc_frequency ; idx++)
         {
             int doc_id, tf;
             iss >> doc_id >> tf;
-            // [TODO]
+
+            // [TODO] implement no compression 
             std::vector<std::string> variable_bytes_doc_id = variable_byte_encoding(doc_id); // the type of encoding should be decided by CMD arguments
             std::vector<std::string> variable_bytes_tf = variable_byte_encoding(tf);
 
-
             for(auto byte_string : variable_bytes_doc_id)
-            {
-                // write_byte_string(postings_list_file, byte_string);
                 byte_strings.push_back(byte_string);
-            }
 
             for(auto byte_string : variable_bytes_tf)
-            {
-                // write_byte_string(postings_list_file, byte_string);
                 byte_strings.push_back(byte_string);
-            }            
+                      
             total_bytes_written += variable_bytes_doc_id.size() + variable_bytes_tf.size();
+
+            // update the document vector norms
+            float document_vector_element = inverse_document_frequency(term_doc_frequency, document_cnt) * tf;
+            normalized_document_vector_norms[doc_id] += document_vector_element * document_vector_element;
         }
         write_multiple_byte_strings(postings_list_file, byte_strings);
     }
@@ -411,39 +414,10 @@ int main(int argc, char *argv[]) {
     // write document id to document idx mappings to the vocabulary file
     vocab_file << "\n" ; // seperator to seperate the document mappings and the actual vocabulary
 
-    // also write normalized document vector norms to this file
-    std::unordered_map<std::string, float> normalized_document_vector_norms;
-    files_processed = 0 ;
-    for (const auto &file : fs::directory_iterator(directory_path)) 
-    { // loop for finding all the normalized document vectors
-        print_progress(files_processed++, file_cnt);
-        if (fs::is_regular_file(file)) {
-            // process file
-            std::vector<Document> documents = parse_file(file.path());
-            for (auto const& doc : documents) {
-                float document_vector_norm = 0.0;
-                std::string document_content = doc.title + " " + doc.content;
-                for(char &ch : document_content)
-                    ch = tolower(ch);
-                std::vector<std::string> tokens = tokenizer->tokenize(document_content);
-                std::unordered_map<std::string, int> token_counts;
-                for(auto const &token : tokens) token_counts[token] += 1;
-                for(auto const &pr : token_counts)
-                {
-                    const std::string &token = pr.first;
-                    const int token_frequency = pr.second;
-                    // need inverse document frequency
-                    float document_vector_element = inverse_document_frequency(term_to_document_count[token], document_cnt) * token_frequency;
-                    document_vector_norm += (document_vector_element*document_vector_element);
-                }
-                normalized_document_vector_norms[doc.docID] = sqrt(document_vector_norm);
-            }
-        }
-    }
-
+    // also write normalized document vector norms and idx to id mappings to this file
     for(auto const &pr : docId_to_idx)
     {
-        vocab_file << pr.second << " " << pr.first << " " << normalized_document_vector_norms[pr.first] <<  "\n";
+        vocab_file << pr.second << " " << pr.first << " " << sqrt(normalized_document_vector_norms[pr.second]) <<  "\n";
     }
     vocab_file.close();
 

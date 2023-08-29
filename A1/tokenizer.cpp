@@ -383,7 +383,7 @@ std::vector<std::string> BPETokenizer::tokenize(const std::string &text)
 
 // int main(int argc, char* argv[])
 // {
-//     BPETokenizer tokenizer(std::set<char>{'.', ' ', ':', ';', '\"', '\'', '.', '?', '!', ',', '\n'}, 500);
+//     BPETokenizer tokenizer(get_basic_delimiters(), 500);
 //     // std::vector<std::string> corpus;
 //     // corpus.push_back("This is part of the information retreival course");
 //     // corpus.push_back("My name is chinmay");

@@ -72,5 +72,5 @@ float term_frequency(float term_count)
 
 std::set<char> get_base_delimiters()
 {
-    return std::set<char>{'.' , ' ' , ':', ';', '\"', '\'', '.', '?', '!', ',', '\n'};
+    return std::set<char>{'.' , ' ' , ':', ';', '\"', '\'', '.', '?', '!', ',', '\n', '~', '`', '(', ')', '/', '#', '*', '%', '+', '-', '[', ']', '{', '}', '@', '^'};
 }

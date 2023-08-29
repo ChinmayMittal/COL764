@@ -188,7 +188,7 @@ int main(int argc, char* argv[])
         std::vector<std::string> query_title_tokens = tokenizer->tokenize(query_title);
         std::vector<std::string> query_content_tokens = tokenizer->tokenize(query_content);
 
-        // Sort the vector of strings using a lambda function
+        // Sort the tokens inside the content, in order of importance
         std::sort(query_content_tokens.begin(), query_content_tokens.end(), [&vocab_dict](const std::string& a, const std::string& b) {
             int a_count = vocab_dict.count(a);
             int b_count = vocab_dict.count(b);
@@ -210,11 +210,8 @@ int main(int argc, char* argv[])
         int content_tokens_to_consider = std::max((int)query_content_tokens.size()/4, 10);
         if(content_tokens_to_consider > query_content_tokens.size()) content_tokens_to_consider = query_content_tokens.size();
         for(int idx = 0; idx < content_tokens_to_consider; idx++)
-        {
             query_token_cnt[query_content_tokens[idx]] += 1;
-            if(query.number == 372)
-            std::cout << query_content_tokens[idx] << std::endl;
-        }
+        
         
         std::unordered_map<int, float> document_scores; // final document scores for this query idx --> score
         std::unordered_map<int, float> document_term_counts; // count of query terms in the document idx --> count
@@ -247,12 +244,9 @@ int main(int argc, char* argv[])
     
             vocab_file.close();
         }
-        // need to normalize document scores [TODO]
-        // for(int idx = 0; idx < document_scores.size(); idx++) document_scores[idx] /= normalized_document_vector_norms[idx];
         for(auto &pr : document_scores)
-        {
             pr.second /= normalized_document_vector_norms[pr.first];
-        }
+        
 
         // get the best documents
         // min heap for this purpose stores <score, id> for the best documents
