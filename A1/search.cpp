@@ -128,13 +128,15 @@ std::vector<std::pair<int, int>> get_postings_list(std::string postings_file_pat
 int main(int argc, char* argv[])
 {
     auto start = std::chrono::high_resolution_clock::now();
-    if(argc < 3)
+    if(argc < 5)
     {
-        std::cout << "Script Requires Query File and Output File paths\n";
+        std::cout << "Script Requires Query File and Output Results File, Index File and Dictionary File paths\n";
         return 1;
     }
     std::string query_file_path = argv[1];
     std::string output_file_path = argv[2];
+    std::string index_file_path = argv[3];
+    std::string dictionary_file_path = argv[4];
     std::cout << "Query File: " << query_file_path << "\n";
     std::cout << "Output File path: " << output_file_path << "\n";
 
@@ -147,7 +149,7 @@ int main(int argc, char* argv[])
     }
 
     // get the arguments of compression from the postings file
-    std::ifstream postings_file("postings", std::ios::binary); // Open the binary file in binary mode
+    std::ifstream postings_file(index_file_path, std::ios::binary); // Open the binary file in binary mode
     if (!postings_file.is_open()) {
         std::cerr << "Failed to open the postings file." << std::endl;
         return 1;
@@ -177,7 +179,7 @@ int main(int argc, char* argv[])
 
     // store the vocabulary
     std::map<std::string, std::pair<int,int>> vocab_dict; // term --> <doc_freq, byte_offset>
-    std::ifstream vocab_file("vocabulary"); // find a more effecient way to do this
+    std::ifstream vocab_file(dictionary_file_path); // find a more effecient way to do this
     if(!vocab_file)
     {
         std::cerr << "Error opening the file." << std::endl;
@@ -271,7 +273,7 @@ int main(int argc, char* argv[])
             byte_offset = vocab_dict[query_term].second;
             if((float)document_frequency > 0.1 * total_document_count && total_document_count > 1e4) // ignore common words if large collection size
                 continue;
-            std::vector<std::pair<int, int>>postings_list = get_postings_list("postings", byte_offset, document_frequency, compresion_arg);
+            std::vector<std::pair<int, int>>postings_list = get_postings_list(index_file_path, byte_offset, document_frequency, compresion_arg);
             for(auto const &pr : postings_list)
             {
                 int document_id = pr.first;

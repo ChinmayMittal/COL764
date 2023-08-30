@@ -7,7 +7,7 @@ INVERT_INDEX_TARGET = inverted_index
 SEARCH_TARGET = search
 
 # Source files
-SRC = inverted_index.cpp pugixml.cpp tokenizer.cpp utils.cpp
+SRC = invidx_cons.cpp pugixml.cpp tokenizer.cpp utils.cpp
 OBJS = $(SRC:.cpp=.o)
 
 SEARCH_SRC = search.cpp tokenizer.cpp utils.cpp pugixml.cpp
@@ -35,4 +35,4 @@ $(SEARCH_TARGET): $(SEARCH_OBJS)
 
 # Clean up object files and executable
 clean:
-	rm -f $(OBJS) $(TARGET) $(SEARCH_TARGET) $(SEARCH_OBJS)
+	rm -f $(OBJS) $(INVERT_INDEX_TARGET) $(SEARCH_TARGET) $(SEARCH_OBJS)
