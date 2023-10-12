@@ -1,10 +1,11 @@
 from math import log2
+from utils import parse_results_file
 
 benchmark_query_relevances_path = "./col764-ass2-release/t40-qrels.txt"
 results_path = "./col764-ass2-release/t40-top-100.txt"
 
 gold_results = {} ## query_number -> cord_id -> score
-output_results = {} ## query_number -> rank -> cord_id
+
 scores = {} ## query_number -> index -> n-DCG
 with open(benchmark_query_relevances_path, 'r') as gold_file:
     for line in gold_file.readlines():
@@ -16,15 +17,7 @@ with open(benchmark_query_relevances_path, 'r') as gold_file:
                 gold_results[query_number] = dict()
             gold_results[query_number][cord_id] = relevance
         
-with open(results_path, 'r') as results_file:
-    for line in results_file.readlines():
-        if line.strip():
-            query_number, ignore_col, cord_id, rank, score, run_id = tuple(line.split())
-            query_number = int(query_number)
-            rank = int(rank)
-            if query_number not in output_results:
-                output_results[query_number] = dict()
-            output_results[query_number][rank] = cord_id
+output_results = parse_results_file(results_file_path=results_path) ## query_number -> rank -> cord_id
 
 query_numbers = list(map(int, output_results.keys()))
 
