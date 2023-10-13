@@ -1,6 +1,7 @@
 import os
 import csv
 import json
+from math import log10
 from typing import List
 
 def parse_results_file(results_file_path):
@@ -58,8 +59,8 @@ def preprocess_meta_data_file(cord_uids: List[str], meta_data_path: str):
         for row in reader:
             if row['cord_uid'] in cord_uids:
                 cord_uid = row['cord_uid']
-                pmc_json_files = [name for name in row['pmc_json_files'].split(';') if "json" in name]
-                pdf_json_files = [name for name in row['pdf_json_files'].split(';') if "json" in name]
+                pmc_json_files = [name.strip() for name in row['pmc_json_files'].split(';') if "json" in name]
+                pdf_json_files = [name.strip() for name in row['pdf_json_files'].split(';') if "json" in name]
                 abstract, title = row['abstract'], row['title']
                 if cord_uid not in meta_data_dict:
                     meta_data_dict[cord_uid] = []
@@ -72,11 +73,18 @@ def preprocess_meta_data_file(cord_uids: List[str], meta_data_path: str):
                 
     return meta_data_dict
 
+def kl_divergence(document_model, relevance_model_probabilities):
+    accumulator = 0
+    for word in relevance_model_probabilities.keys():
+        accumulator += document_model.probability(word) * log10(document_model.probability(word)/relevance_model_probabilities[word])
+    return accumulator
+        
+        
 if  __name__ == '__main__':
     cord_id = 'ug7v899j'
     # cord_id = '8l411r1w'
     meta_data_path = '/Users/chinmaymittal/Downloads/2020-07-16/metadata.csv'
     document_dir_path = '/Users/chinmaymittal/Downloads/2020-07-16/'
     meta_data = preprocess_meta_data_file(cord_uids=[cord_id], meta_data_path=meta_data_path)
-    # print(meta_data)
+    print(meta_data[cord_id])
     print(get_text_from_cord_id(cord_id, meta_data, document_dir_path))

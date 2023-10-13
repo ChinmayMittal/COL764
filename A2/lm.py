@@ -1,5 +1,5 @@
 from typing import Dict
-from constants import DELIMITERS
+from constants import DELIMITERS, DIRICHILET_MU
 from tokenizer import SimpleTokenizer
 from utils import get_text_from_cord_id, preprocess_meta_data_file
 
@@ -19,6 +19,15 @@ class DocumentLanguageModel:
                     self.word_counts[token] += 1
                 else:
                     self.word_counts[token] = 1
+        self.background_lm = None
+        self.mu = DIRICHILET_MU
+    
+    def add_background_model(self, background_lm):
+        self.background_lm = background_lm
+        
+    def probability(self, word: str):
+        term_frequency = self.word_counts.get(word,0)
+        return (term_frequency + self.mu * self.background_lm.probability(word))/(self.document_length + self.mu)
                     
 class CombinedLanguageModel:
     
@@ -33,6 +42,10 @@ class CombinedLanguageModel:
                 self.word_counts[word] += count
             else:
                 self.word_counts[word] = count
+    
+    def probability(self, word: str):
+        term_frequency = self.word_counts.get(word,0)
+        return (term_frequency/self.total_count)
         
 if __name__ == '__main__':
     cord_uid1 = 'sdlhh79b'
