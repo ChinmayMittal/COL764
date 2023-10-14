@@ -3,8 +3,10 @@ from lm import DocumentLanguageModel, CombinedLanguageModel
 
 query_file_path = './col764-ass2-release/covid19-topics.xml'
 top_100_file_path = './col764-ass2-release/t40-top-100.txt'
+
 meta_data_path = '/Users/chinmaymittal/Downloads/2020-07-16/metadata.csv'
 document_dir_path = '/Users/chinmaymittal/Downloads/2020-07-16/'
+
 output_file_path = './output.txt'
 
 query_file = open(query_file_path, 'r')
