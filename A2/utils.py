@@ -79,7 +79,13 @@ def kl_divergence(document_model, relevance_model_probabilities):
         accumulator += document_model.probability(word) * log10(document_model.probability(word)/relevance_model_probabilities[word])
     return accumulator
         
-        
+def kl_divergence_reverse(document_model, query_model):
+    accumulator = 0
+    for word in query_model.keys():
+        if query_model[word] > 0:
+            accumulator += query_model[word] * log10(query_model[word]/document_model.probability(word))
+    return accumulator
+
 if  __name__ == '__main__':
     cord_id = 'ug7v899j'
     # cord_id = '8l411r1w'

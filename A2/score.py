@@ -3,7 +3,7 @@ from utils import parse_results_file
 
 benchmark_query_relevances_path = "./col764-ass2-release/t40-qrels.txt"
 # results_path = "./col764-ass2-release/t40-top-100.txt"
-results_path = './output.txt'
+results_path = './output-w2v.txt'
 
 gold_results = {} ## query_number -> cord_id -> score
 
