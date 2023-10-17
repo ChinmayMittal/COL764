@@ -1,7 +1,15 @@
 from typing import Dict
-from constants import DELIMITERS, DIRICHILET_MU
+from constants import (
+            DELIMITERS,
+            DIRICHILET_MU,
+            LOWERCASE,
+            PUNCTUATIONS,
+            DIGITS,
+            STEMMING,
+            STOPWORDS_ELIMINATION
+        )
 from tokenizer import SimpleTokenizer
-from utils import get_text_from_cord_id, preprocess_meta_data_file
+from utils import get_text_from_cord_id, preprocess_meta_data_file, preprocess_text
 
 class DocumentLanguageModel:
     
@@ -12,6 +20,7 @@ class DocumentLanguageModel:
         self.document_length = 0
         self.word_counts: Dict[str, int] = dict()
         for text in text_list:
+            text = preprocess_text(text, lowercase=LOWERCASE, punctuations=PUNCTUATIONS, digits=DIGITS, stemming=STEMMING, stopwords_elimination=STOPWORDS_ELIMINATION)
             text_tokens = self.tokenizer.tokenize(text)
             self.document_length += len(text_tokens)
             for token in text_tokens:
@@ -28,7 +37,7 @@ class DocumentLanguageModel:
     def probability(self, word: str):
         term_frequency = self.word_counts.get(word,0)
         return (term_frequency + self.mu * self.background_lm.probability(word))/(self.document_length + self.mu)
-                    
+
 class CombinedLanguageModel:
     
     def __init__(self):
@@ -42,6 +51,9 @@ class CombinedLanguageModel:
                 self.word_counts[word] += count
             else:
                 self.word_counts[word] = count
+
+    def add_unk(self, percentage):
+        self.word_counts['<UNK>'] = int(percentage/100 * sum(self.word_counts.values()))
     
     def probability(self, word: str):
         term_frequency = self.word_counts.get(word,0)

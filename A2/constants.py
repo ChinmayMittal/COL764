@@ -1,3 +1,9 @@
 DELIMITERS = [" ", ",", ".", ":", ";", "\"", "\'", '/', '-', '%', '(', ')', '[', ']' ]
 DIRICHILET_MU = 250
 TOP_K = 20
+LOWERCASE = True
+PUNCTUATIONS = True
+DIGITS = True
+STEMMING = False
+STOPWORDS_ELIMINATION = True
+W2V_LAMBDA = 0.25

@@ -1,13 +1,21 @@
 import nltk
 nltk.download('stopwords')
 
+from constants import (
+            LOWERCASE,
+            PUNCTUATIONS,
+            DIGITS,
+            STEMMING,
+            STOPWORDS_ELIMINATION,
+            W2V_LAMBDA
+        )
 import numpy as np
 from collections import Counter
 import xml.etree.ElementTree as ET
 from nltk.corpus import stopwords
 from constants import TOP_K
 from lm import DocumentLanguageModel, CombinedLanguageModel
-from utils import parse_results_file, preprocess_meta_data_file, kl_divergence_reverse
+from utils import parse_results_file, preprocess_meta_data_file, kl_divergence_reverse, preprocess_text
 
 
 expansions_file_path = "./expansions.txt"
@@ -41,14 +49,17 @@ def parse_embedding_file(file_path):
     
     with open(file_path, 'r') as file:
         num_words, num_dimensions = map(int, file.readline().split())
-        for i, line in enumerate(file):
-            parts = line.split()
-            word = parts[0]
-            embedding = np.array(list(map(float, parts[1:])))
-            word_to_index[word] = i
-            index_to_word[i] = word
-            embeddings.append(embedding/np.sqrt(np.sum(embedding**2))) ### normalize embeddings
-
+        try:
+            for i, line in enumerate(file):
+                parts = line.split()
+                word = parts[0]
+                embedding = np.array(list(map(float, parts[1:])))
+                word_to_index[word] = i
+                index_to_word[i] = word
+                embeddings.append(embedding/np.sqrt(np.sum(embedding**2))) ### normalize embeddings
+        except Exception as e:
+            print(file_path)
+            exit()
     embeddings_array = np.array(embeddings)    
     return embeddings_array, word_to_index, index_to_word
 
@@ -68,7 +79,8 @@ for topic_idx, topic in topics.items():
         expansions_file.write(f"{topic_idx}: ")
         embeddings, word_to_index, index_to_word = parse_embedding_file(f"./vectors/vectors-{topic_idx}.text")
         V, k = embeddings.shape ### embeddings is |V| * |k| where k is the dimension of the word embeddings, |V| is vocabulary size
-        query = ' '.join([word for word in (topic['query']).split() if word not in stop_words])
+        # query = ' '.join([word for word in (topic['query']).split() if word not in stop_words])
+        query = preprocess_text(topic['query'], lowercase=LOWERCASE, punctuations=PUNCTUATIONS, digits=DIGITS, stemming=STEMMING, stopwords_elimination=STOPWORDS_ELIMINATION)
         print(query)
 
         query_vector = np.zeros(shape=(V,1)) ### binary vector representing terms present in query
@@ -87,12 +99,15 @@ for topic_idx, topic in topics.items():
         ## Get the top indices
         top_indices = [(idx // query_similarity_scores.shape[1], idx % query_similarity_scores.shape[1]) for idx in sorted_indices[:TOP_K]]
 
-        query_terms = query.lower().split()
+        original_query_terms = query.lower().split()
+        expanded_query_terms = []
         for top_index in top_indices:
             similar_term, _ = top_index
             expansions_file.write(f"{index_to_word[similar_term]} ")
-            query_terms.append(index_to_word[similar_term])
-        expanded_query_term_counter = Counter(query_terms) ### this can be more complicated (from paper)
+            expanded_query_terms.append(index_to_word[similar_term])
+        
+        expanded_query_term_counter = Counter(expanded_query_terms)
+        original_query_terms_counter = Counter(original_query_terms) 
 
         ### get LMs for all documents ranked for that query
         language_models = [DocumentLanguageModel(cord_uid=cord_uid, meta_data=meta_data, corpus_path=document_dir_path) for rank, cord_uid in query_results[int(topic_idx)].items()]
@@ -100,17 +115,36 @@ for topic_idx, topic in topics.items():
         combined_lm = CombinedLanguageModel()
         for lm in language_models:
             combined_lm.add_document(lm)
+        combined_lm.add_unk(percentage=0.5)
             
         ### add background LM to each individual model for Dirichilet smoothing
         for language_model in language_models:
             language_model.add_background_model(combined_lm)
 
+        new_original_query_term_counter = dict()
+        for k, v in original_query_terms_counter.items():
+            key = k if k in combined_lm.word_counts.keys() else '<UNK>'
+            if key not in new_original_query_term_counter:
+                new_original_query_term_counter[key] = 0
+            new_original_query_term_counter[key] += v
+        original_query_terms_counter = new_original_query_term_counter
+
+        new_expaneded_query_terms_counter = dict()
+        for k, v in expanded_query_term_counter.items():
+            key = k if k in combined_lm.word_counts.keys() else '<UNK>'
+            if key not in new_expaneded_query_terms_counter:
+                new_expaneded_query_terms_counter[key] = 0
+            new_expaneded_query_terms_counter[key] += v
+        expanded_query_term_counter = new_expaneded_query_terms_counter
+            
         print(expanded_query_term_counter)
         ### compute relevant model probabilities (expanded query model)
         ### some query terms are not in global vocab
         relevance_model_probabilities = dict()
         for word in combined_lm.word_counts.keys():
-            relevance_model_probabilities[word] = expanded_query_term_counter.get(word, 0)/sum(expanded_query_term_counter.values())
+            relevance_model_probabilities[word] = 0
+            relevance_model_probabilities[word] += (W2V_LAMBDA)*(expanded_query_term_counter.get(word,0)/sum(expanded_query_term_counter.values()))
+            relevance_model_probabilities[word] += (1-W2V_LAMBDA)*(original_query_terms_counter.get(word,0)/sum(original_query_terms_counter.values()))
         
         print(sum(relevance_model_probabilities.values())) ## doesn't sum to 1, because some query_terms are not in vocab
 

@@ -1,8 +1,34 @@
 import os
+import re
+import string
 import csv
 import json
 from math import log10
 from typing import List
+from constants import DELIMITERS
+from tokenizer import SimpleTokenizer
+
+import nltk
+nltk.download('punkt')
+from nltk.stem import SnowballStemmer
+
+
+
+def simple_progress_bar(iterable, total=None, bar_length=30):
+    if total is None:
+        try:
+            total = len(iterable)
+        except TypeError:
+            raise TypeError("If 'total' is not provided, 'iterable' must have a length.")
+
+    for i, item in enumerate(iterable):
+        progress = (i / total) * 100
+        num_blocks = int(round(bar_length * progress / 100))
+        bar = "#" * num_blocks + "-" * (bar_length - num_blocks)
+        status = f"[{bar}] {progress:.1f}% ({i}/{total})"
+        print(status, end="\r")
+        yield item
+    print()  # Print a newline to complete the progress bar display
 
 def parse_results_file(results_file_path):
     
@@ -18,6 +44,40 @@ def parse_results_file(results_file_path):
                 results[query_number][rank] = cord_id
     return results
 
+def preprocess_text( text: str,
+                     lowercase: bool,
+                     punctuations: bool,
+                     digits: bool,
+                     stemming: bool,
+                     stopwords_elimination: bool) -> str:
+    
+    if lowercase:
+        text = text.lower()
+   
+    if punctuations:
+        translator = str.maketrans('', '', string.punctuation)
+        text = text.translate(translator)
+        tokenizer = SimpleTokenizer(DELIMITERS)
+        text = " ".join(tokenizer.tokenize(text))
+    
+    if stemming:
+        stemmer = SnowballStemmer("english")
+        words = nltk.word_tokenize(text)
+        stemmed_words = [stemmer.stem(word) for word in words]
+        text = ' '.join(stemmed_words)
+        
+    if digits:
+        digits_pattern = r"\d+(\.\d+)?"
+        text = re.sub(digits_pattern, "<NUMBER>", text)
+    
+    if stopwords_elimination:
+        stop_words_set = {'what', 'i', 'didn', 'doing', 'themselves', 'd', 'ourselves', "you'll", "you've", "should've", 'its', 'before', 'while', 'off', 'can', 'once', 'only', 'being', 'have', 'but', 'nor', 'above', 'any', 'by', 'itself', 'shan', 'during', 'below', 'needn', 'with', 'shouldn', 'be', "it's", 're', 'she', "doesn't", 'the', 'wasn', 'a', 'you', "needn't", 'yourself', 'an', "aren't", "weren't", 'did', 'himself', 'herself', "don't", 'yourselves', 'aren', 'hadn', 'than', 'not', "that'll", 'couldn', 'so', 'do', 'having', 'mustn', "wouldn't", "haven't", "isn't", 'these', 'has', 'and', 'until', 'yours', 'y', 'theirs', 'under', 'does', 's', 'it', 'same', 'their', 'ours', 'after', 'don', 'doesn', 'at', 'ain', 'is', 'for', 'wouldn', "won't", 'he', 'or', 'over', 'all', 'are', 'to', 'myself', 'against', 'own', 'her', 'very', "couldn't", 'just', 'won', 'because', 'had', 'm', 'some', "mustn't", 'ma', 'your', 'each', 'out', 'such', 'again', 'more', 'am', "hasn't", 'isn', 'into', 'down', 'my', 'further', 'was', 'weren', 'whom', 'haven', 'through', 'when', 'here', "you're", 'why', 'this', 'should', 'hers', 'were', 've', 'then', "didn't", 'we', "you'd", "wasn't", 'his', 'o', 'few', 'will', "hadn't", 'no', 'if', "she's", 'of', 'there', 'which', 'now', 'mightn', 'me', 'been', 'from', 'how', "shan't", 'in', 'them', "mightn't", 'our', "shouldn't", 'between', 'where', 'as', 'too', 'up', 'both', 'him', 'who', 'that', 'll', 'those', 'they', 'on', 'other', 'most', 'hasn', 't', 'about'}
+        text = ' '.join(word for word in text.split() if word not in stop_words_set)
+        
+    
+        
+    return text    
+    
 
 def get_text_from_cord_id(cord_uid: str, meta_data, corpus_dir_path: str) -> List[str]:
     try:
