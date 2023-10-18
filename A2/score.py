@@ -1,14 +1,29 @@
+import argparse
 from math import log2
 from utils import parse_results_file
 
-benchmark_query_relevances_path = "./col764-ass2-release/t40-qrels.txt"
-# results_path = "./col764-ass2-release/t40-top-100.txt"
-results_path = './output-w2v.txt'
+
+parser = argparse.ArgumentParser(description="Compute NDCG scores for different Queries")
+
+parser.add_argument('--gold_query_relevances_path', required=True, type=str,
+                        help="Path to the gold query relevances file in TREC format")
+parser.add_argument('--results_path', required=True, type=str,
+                        help="Path to query results files in TREC format")
+
+
+args = parser.parse_args()
+gold_query_relevances_path = args.gold_query_relevances_path
+results_path = args.results_path
+
+# gold_query_relevances_path = "./col764-ass2-release/t40-qrels.txt"
+# # results_path = "./col764-ass2-rease/t40-top-100.txt"
+# # results_path = './output-w2v.txt'
+# results_path = './output-lm.txt'
 
 gold_results = {} ## query_number -> cord_id -> score
 
 scores = {} ## query_number -> index -> n-DCG
-with open(benchmark_query_relevances_path, 'r') as gold_file:
+with open(gold_query_relevances_path, 'r') as gold_file:
     for line in gold_file.readlines():
         if line.strip():
             query_number, run, cord_id, relevance = tuple(line.split())
