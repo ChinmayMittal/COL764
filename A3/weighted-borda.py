@@ -45,14 +45,13 @@ for query in rank_data.keys():
         for rank_engine in document['ranks'].keys():
             if document['ranks'][rank_engine] is not None:
                 # weights[rank_engine] += relevance_label / (60 + document['ranks'][rank_engine])
-                weights[rank_engine] += relevance_label / (60 + document['ranks'][rank_engine])
+                weights[rank_engine] += relevance_label / (100 + document['ranks'][rank_engine])
                 
 
 normalization_factor = sum([v for k, v in weights.items()])
 weights = {
     rank_engine: weight/normalization_factor for rank_engine, weight in weights.items()
 }
-print(weights)
 
 output_file = open(output_file_path, 'w')
 for query in rank_data.keys():
@@ -64,7 +63,7 @@ for query in rank_data.keys():
         doc_id = document['doc_id']
         for rank_engine in document['ranks'].keys():
             if document['ranks'][rank_engine] is not None:
-                document_scores[doc_id] += weights[rank_engine] *  (max_ranks[rank_engine] - document['ranks'][rank_engine])
+                document_scores[doc_id] += weights[rank_engine] *  (max_ranks[rank_engine] - document['ranks'][rank_engine]+1)
     
     document_scores = [(doc, score) for doc, score in document_scores.items()]
     document_scores.sort(reverse=True, key=lambda x: x[1])
@@ -73,4 +72,3 @@ for query in rank_data.keys():
         output_file.write(f"{output_str}\n")
 
 output_file.close()
-print(max_ranks)

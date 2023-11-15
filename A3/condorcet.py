@@ -72,17 +72,12 @@ for query in rank_data.keys():
         doc_id = document_ids[i]
         for rank_engine in document_data[i]['ranks'].keys():
             if  document_data[i]['ranks'][rank_engine] is not None:
-                borda_scores[doc_id] += max_ranks[rank_engine] - document_data[i]['ranks'][rank_engine]
+                borda_scores[doc_id] += max_ranks[rank_engine] - document_data[i]['ranks'][rank_engine]+1
 
-              
-        
     document_scores = [(doc, score, borda_scores[doc]) for doc, score in document_scores.items()]
     document_scores.sort(reverse=True, key=lambda x: (x[1], x[2]))
     for idx, (document, score, borda_score) in enumerate(document_scores):
-        output_str = ouptut_formatter(query_number=query, document_id=document, rank=idx+1, score=float(f"{score}.{borda_score}"), method='condorcet')
+        output_str = ouptut_formatter(query_number=query, document_id=document, rank=idx+1, score=score, method='condorcet')
         output_file.write(f"{output_str}\n")
             
-            
-            
-    
 output_file.close()

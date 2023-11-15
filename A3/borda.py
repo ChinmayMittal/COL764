@@ -39,13 +39,11 @@ for query in rank_data.keys():
         doc_id = document['doc_id']
         for rank_engine in document['ranks'].keys():
             if document['ranks'][rank_engine] is not None:
-                document_scores[doc_id] += max_ranks[rank_engine] - document['ranks'][rank_engine]
+                document_scores[doc_id] += max_ranks[rank_engine] - document['ranks'][rank_engine] + 1
     
     document_scores = [(doc, score) for doc, score in document_scores.items()]
     document_scores.sort(reverse=True, key=lambda x: x[1])
     for idx, (document, score) in enumerate(document_scores):
         output_str = ouptut_formatter(query_number=query, document_id=document, rank=idx+1, score=score, method='bordacount')
         output_file.write(f"{output_str}\n")
-
 output_file.close()
-print(max_ranks)

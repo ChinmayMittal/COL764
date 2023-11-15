@@ -70,9 +70,22 @@ def parse_mq2008_agg_file(file_path):
 
     return parsed_data
 
+def generate_qrels(agg_file_path):
+    parsed_data = parse_mq2008_agg_file(agg_file_path)
+    qrels_file = open('qrels.txt', 'w')
+    for query in parsed_data.keys():
+        document_data = parsed_data[query]
+        document_data = [(doc['doc_id'], doc['relevance_label']) for doc in document_data]
+        document_data.sort(reverse=True, key=lambda x: x[1])
+        for idx, (doc, score) in enumerate(document_data):
+            qrels_file.write(f"{query} Q0 {doc} {score}\n")
+    qrels_file.close()
 if __name__ == '__main__':
     # Example usage
-    parsed_data = parse_mq2008_agg_file('/Users/chinmaymittal/Downloads/MQ2008-agg/agg.txt')
+    agg_file_path = '/Users/chinmaymittal/Downloads/MQ2008-agg/agg.txt'
+    parsed_data = parse_mq2008_agg_file(agg_file_path)
     print(len(parsed_data[10002]))
     print(parsed_data[10002][0])
+    generate_qrels(agg_file_path)
+    
 

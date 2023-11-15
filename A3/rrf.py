@@ -26,14 +26,14 @@ for query in rank_data.keys():
     document_scores = {
         doc['doc_id']: 0 for doc in document_data
     }
-    rank_engines = document_data[0]['ranks'].keys()
     for document in document_data:
         doc_id = document['doc_id']
+        rank_engines = document['ranks'].keys()
         for rank_engine in rank_engines:
             document_scores[doc_id] += RRF_score(document['ranks'][rank_engine])
     document_scores = [(doc, score) for doc, score in document_scores.items()]
     document_scores.sort(reverse=True, key=lambda x: x[1])
-    for rank, (document, score) in enumerate(document_scores):
-        output_str = ouptut_formatter(query_number=query, document_id=document, rank=rank+1, score=score, method='rrf')
+    for idx, (document, score) in enumerate(document_scores):
+        output_str = ouptut_formatter(query_number=query, document_id=document, rank=idx+1, score=score, method='rrf')
         output_file.write(f"{output_str}\n")
 output_file.close()
