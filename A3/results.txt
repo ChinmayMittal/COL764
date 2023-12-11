@@ -1,0 +1,54 @@
+RRF
+K = 10
+map                     all     0.5345
+P_5                     all     0.4005
+P_10                    all     0.2966
+K = 30
+map                     all     0.5516
+P_5                     all     0.4138
+P_10                    all     0.3032
+K = 60
+map                     all     0.5536
+P_5                     all     0.4199
+P_10                    all     0.3060
+K = 100
+map                     all     0.5560
+P_5                     all     0.4232
+P_10                    all     0.3069
+K = 200
+map                     all     0.5594
+P_5                     all     0.4255
+P_10                    all     0.3077
+K = 400
+map                     all     0.5592
+P_5                     all     0.4255
+P_10                    all     0.3092
+K = 500
+map                     all     0.5588
+P_5                     all     0.4255
+P_10                    all     0.3088
+
+K = 1000
+map                     all     0.5345
+P_5                     all     0.4005
+P_10                    all     0.2966
+
+BordaCount
+map                     all     0.5635
+P_5                     all     0.4278
+P_10                    all     0.3108
+
+Condorcet Voting
+map                     all     0.5596
+P_5                     all     0.4258
+P_10                    all     0.3106
+
+BayesFuse
+map                     all     0.5839
+P_5                     all     0.4441
+P_10                    all     0.3170
+
+Weighted BordaFuse
+map                     all     0.5675
+P_5                     all     0.4293
+P_10                    all     0.3129
