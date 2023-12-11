@@ -3,6 +3,7 @@ import re
 import string
 import csv
 import json
+import numpy as np
 from math import log10
 from typing import List
 from constants import DELIMITERS
@@ -54,6 +55,10 @@ def preprocess_text( text: str,
     if lowercase:
         text = text.lower()
    
+    if stopwords_elimination:
+        stop_words_set = {'what', 'i', 'didn', 'doing', 'themselves', 'd', 'ourselves', "you'll", "you've", "should've", 'its', 'before', 'while', 'off', 'can', 'once', 'only', 'being', 'have', 'but', 'nor', 'above', 'any', 'by', 'itself', 'shan', 'during', 'below', 'needn', 'with', 'shouldn', 'be', "it's", 're', 'she', "doesn't", 'the', 'wasn', 'a', 'you', "needn't", 'yourself', 'an', "aren't", "weren't", 'did', 'himself', 'herself', "don't", 'yourselves', 'aren', 'hadn', 'than', 'not', "that'll", 'couldn', 'so', 'do', 'having', 'mustn', "wouldn't", "haven't", "isn't", 'these', 'has', 'and', 'until', 'yours', 'y', 'theirs', 'under', 'does', 's', 'it', 'same', 'their', 'ours', 'after', 'don', 'doesn', 'at', 'ain', 'is', 'for', 'wouldn', "won't", 'he', 'or', 'over', 'all', 'are', 'to', 'myself', 'against', 'own', 'her', 'very', "couldn't", 'just', 'won', 'because', 'had', 'm', 'some', "mustn't", 'ma', 'your', 'each', 'out', 'such', 'again', 'more', 'am', "hasn't", 'isn', 'into', 'down', 'my', 'further', 'was', 'weren', 'whom', 'haven', 'through', 'when', 'here', "you're", 'why', 'this', 'should', 'hers', 'were', 've', 'then', "didn't", 'we', "you'd", "wasn't", 'his', 'o', 'few', 'will', "hadn't", 'no', 'if', "she's", 'of', 'there', 'which', 'now', 'mightn', 'me', 'been', 'from', 'how', "shan't", 'in', 'them', "mightn't", 'our', "shouldn't", 'between', 'where', 'as', 'too', 'up', 'both', 'him', 'who', 'that', 'll', 'those', 'they', 'on', 'other', 'most', 'hasn', 't', 'about'}
+        text = ' '.join(word for word in text.split() if word not in stop_words_set)
+    
     if punctuations:
         translator = str.maketrans('', '', string.punctuation)
         text = text.translate(translator)
@@ -70,9 +75,6 @@ def preprocess_text( text: str,
         digits_pattern = r"\d+(\.\d+)?"
         text = re.sub(digits_pattern, "<NUMBER>", text)
     
-    if stopwords_elimination:
-        stop_words_set = {'what', 'i', 'didn', 'doing', 'themselves', 'd', 'ourselves', "you'll", "you've", "should've", 'its', 'before', 'while', 'off', 'can', 'once', 'only', 'being', 'have', 'but', 'nor', 'above', 'any', 'by', 'itself', 'shan', 'during', 'below', 'needn', 'with', 'shouldn', 'be', "it's", 're', 'she', "doesn't", 'the', 'wasn', 'a', 'you', "needn't", 'yourself', 'an', "aren't", "weren't", 'did', 'himself', 'herself', "don't", 'yourselves', 'aren', 'hadn', 'than', 'not', "that'll", 'couldn', 'so', 'do', 'having', 'mustn', "wouldn't", "haven't", "isn't", 'these', 'has', 'and', 'until', 'yours', 'y', 'theirs', 'under', 'does', 's', 'it', 'same', 'their', 'ours', 'after', 'don', 'doesn', 'at', 'ain', 'is', 'for', 'wouldn', "won't", 'he', 'or', 'over', 'all', 'are', 'to', 'myself', 'against', 'own', 'her', 'very', "couldn't", 'just', 'won', 'because', 'had', 'm', 'some', "mustn't", 'ma', 'your', 'each', 'out', 'such', 'again', 'more', 'am', "hasn't", 'isn', 'into', 'down', 'my', 'further', 'was', 'weren', 'whom', 'haven', 'through', 'when', 'here', "you're", 'why', 'this', 'should', 'hers', 'were', 've', 'then', "didn't", 'we', "you'd", "wasn't", 'his', 'o', 'few', 'will', "hadn't", 'no', 'if', "she's", 'of', 'there', 'which', 'now', 'mightn', 'me', 'been', 'from', 'how', "shan't", 'in', 'them', "mightn't", 'our', "shouldn't", 'between', 'where', 'as', 'too', 'up', 'both', 'him', 'who', 'that', 'll', 'those', 'they', 'on', 'other', 'most', 'hasn', 't', 'about'}
-        text = ' '.join(word for word in text.split() if word not in stop_words_set)
         
     
         
@@ -134,10 +136,16 @@ def preprocess_meta_data_file(cord_uids: List[str], meta_data_path: str):
     return meta_data_dict
 
 def kl_divergence(document_model, relevance_model_probabilities):
-    accumulator = 0
+    document_probabalaties = []
+    relevance_probabalities = []
     for word in relevance_model_probabilities.keys():
-        accumulator += document_model.probability(word) * log10(document_model.probability(word)/relevance_model_probabilities[word])
-    return accumulator
+        document_probabalaties.append(document_model.probability(word))
+        relevance_probabalities.append(relevance_model_probabilities[word])
+        # accumulator += document_model.probability(word) * log10(document_model.probability(word)/relevance_model_probabilities[word])
+    document_probabalaties = np.array(document_probabalaties)
+    relevance_probabalities = np.array(relevance_probabalities)
+    
+    return np.sum(document_probabalaties * np.log10(document_probabalaties/relevance_probabalities))
         
 def kl_divergence_reverse(document_model, query_model):
     accumulator = 0

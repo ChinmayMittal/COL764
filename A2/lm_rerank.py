@@ -75,34 +75,32 @@ for query_number in query_numbers:
     for lm in language_models:
         combined_lm.add_document(lm)
     combined_lm.add_unk(percentage=UNK_PERCENTAGE)
+    
     query_terms = [query_term if query_term in combined_lm.word_counts.keys() else '<UNK>' for query_term in query.split()]
     print(query_terms)
         
     ### add background LM to each individual model for Dirichilet smoothing
     for language_model in language_models:
         language_model.add_background_model(combined_lm)
-        
-   
-    query_probability_total = 0.0
+
+    query_probability_per_language_model = []
     for lm in language_models:
        query_probability = 1
        for query_term in query_terms:
            query_probability *= lm.probability(query_term)
-       query_probability_total += query_probability
-    query_probability_total /= len(language_models)
+       query_probability_per_language_model.append(query_probability)
+    query_probability_total = sum(query_probability_per_language_model)/len(language_models)
 
     ### compute relevant model probabilities
     relevance_model_probabilities = dict()
     for word in combined_lm.word_counts.keys():
         relevance_model_probabilities[word] = 0
-        for lm in language_models:            
+        for lm_idx, lm in enumerate(language_models):            
             accumulator = lm.probability(word)
-            for query_term in query_terms:
-                accumulator *= lm.probability(query_term)
+            accumulator *= query_probability_per_language_model[lm_idx]
             relevance_model_probabilities[word] += accumulator
         relevance_model_probabilities[word] /= len(language_models)
         relevance_model_probabilities[word] /= query_probability_total
-    print(sum(relevance_model_probabilities.values()))
     
     results = []
     for i in range(len(language_models)):

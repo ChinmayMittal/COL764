@@ -1,2 +1,0 @@
-- Optimize Task-1
-- Scripts for Generating Graphs

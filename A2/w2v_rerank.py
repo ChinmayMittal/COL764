@@ -68,10 +68,11 @@ def parse_embedding_file(file_path):
     embeddings = []
     index_to_word = {}
     
-    with open(file_path, 'r') as file:
+    with open(file_path, 'r', encoding='utf-8', errors='replace') as file:
         num_words, num_dimensions = map(int, file.readline().split())
         try:
             for i, line in enumerate(file):
+                line = line.strip()
                 parts = line.split()
                 word = parts[0]
                 embedding = np.array(list(map(float, parts[1:])))
@@ -79,6 +80,7 @@ def parse_embedding_file(file_path):
                 index_to_word[i] = word
                 embeddings.append(embedding/np.sqrt(np.sum(embedding**2))) ### normalize embeddings
         except Exception as e:
+            print(e)
             print(file_path)
             exit()
     embeddings_array = np.array(embeddings)    
@@ -97,16 +99,16 @@ meta_data = preprocess_meta_data_file(cord_uids=list(cord_uids), meta_data_path=
 expansions_file = open(expansions_file_path, 'w')
 output_file = open(output_file_path, 'w')
 for topic_idx, topic in topics.items():
+        print(topic_idx)
         expansions_file.write(f"{topic_idx}: ")
-        embeddings, word_to_index, index_to_word = parse_embedding_file(os.path.join(vectors_dir, f"vectors-{topic_idx}.text"))
+        embeddings, word_to_index, index_to_word = parse_embedding_file(os.path.join(vectors_dir, f"vectors-{topic_idx}.txt"))
         V, k = embeddings.shape ### embeddings is |V| * |k| where k is the dimension of the word embeddings, |V| is vocabulary size
         query = preprocess_text(topic['query'], lowercase=LOWERCASE, punctuations=PUNCTUATIONS, digits=DIGITS, stemming=STEMMING, stopwords_elimination=STOPWORDS_ELIMINATION)
         print(query)
 
         query_vector = np.zeros(shape=(V,1)) ### binary vector representing terms present in query
         for vocab_term, idx in word_to_index.items():
-            if vocab_term.lower() in query.lower().split():
-                query_vector[idx, 0] = 1
+            query_vector[idx, 0] = query.lower().split().count(vocab_term.lower())
         
         similarity_scores = np.matmul(embeddings, embeddings.T)
         query_similarity_scores = np.matmul(similarity_scores, query_vector)
@@ -122,9 +124,11 @@ for topic_idx, topic in topics.items():
         for top_index in top_indices:
             similar_term, _ = top_index
             expansions_file.write(f"{index_to_word[similar_term]} ")
-            expanded_query_terms.append(index_to_word[similar_term])
+            score = query_similarity_scores.flatten()[similar_term]
+            expanded_query_terms.append((index_to_word[similar_term], score))
         
-        expanded_query_term_counter = Counter(expanded_query_terms)
+        normalization_constant = sum([score for word, score in expanded_query_terms])
+        expanded_query_term_counter = {k: v/normalization_constant for k, v in expanded_query_terms}
         original_query_terms_counter = Counter(original_query_terms) 
 
         ### get LMs for all documents ranked for that query
@@ -155,7 +159,6 @@ for topic_idx, topic in topics.items():
             new_expaneded_query_terms_counter[key] += v
         expanded_query_term_counter = new_expaneded_query_terms_counter
             
-        print(expanded_query_term_counter)
         ### compute relevant model probabilities (expanded query model)
         ### some query terms are not in global vocab
         relevance_model_probabilities = dict()
@@ -164,8 +167,6 @@ for topic_idx, topic in topics.items():
             relevance_model_probabilities[word] += (W2V_LAMBDA)*(expanded_query_term_counter.get(word,0)/sum(expanded_query_term_counter.values()))
             relevance_model_probabilities[word] += (1-W2V_LAMBDA)*(original_query_terms_counter.get(word,0)/sum(original_query_terms_counter.values()))
         
-        print(sum(relevance_model_probabilities.values())) ## doesn't sum to 1, because some query_terms are not in vocab
-
         results = []
         for i in range(len(language_models)):
             results.append((i+1, 1-kl_divergence_reverse(language_models[i], relevance_model_probabilities)))
@@ -177,6 +178,7 @@ for topic_idx, topic in topics.items():
         
         
         expansions_file.write("\n")
+        print(f"Processed Query {topic_idx}")
 
 expansions_file.close()
 output_file.close()

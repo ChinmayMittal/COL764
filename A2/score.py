@@ -15,11 +15,6 @@ args = parser.parse_args()
 gold_query_relevances_path = args.gold_query_relevances_path
 results_path = args.results_path
 
-# gold_query_relevances_path = "./col764-ass2-release/t40-qrels.txt"
-# # results_path = "./col764-ass2-rease/t40-top-100.txt"
-# # results_path = './output-w2v.txt'
-# results_path = './output-lm.txt'
-
 gold_results = {} ## query_number -> cord_id -> score
 
 scores = {} ## query_number -> index -> n-DCG
@@ -60,20 +55,12 @@ for query_number in query_numbers:
     for score in discounted_gold_scores:
         discounted_cumulative_score += score
         discounted_cumulative_gold_scores.append(discounted_cumulative_score)
-    
-    # if query_number == 40:
-    #     print(output_scores)
-    #     print(discounted_output_scores)
-    #     print(discounted_cumulative_output_scores)
-    #     print("-"*50)
-    #     print(gold_scores)
-    #     print(discounted_gold_scores)
-    #     print(discounted_cumulative_gold_scores)
+
     def normalized_score_at_rank(rank):
         return discounted_cumulative_output_scores[rank-1]/discounted_cumulative_gold_scores[rank-1]
     
     average_score += normalized_score_at_rank(5) + normalized_score_at_rank(10) + normalized_score_at_rank(50)
-    print(f"Query: {query_number}\n\tnDCG@5: {normalized_score_at_rank(5)}\n\tnDCG@10:{normalized_score_at_rank(10)}\n\tnDCG@50:{normalized_score_at_rank(50)}")
+    print(f"Query: {query_number}\n\tnDCG@5: {normalized_score_at_rank(5)}\n\tnDCG@10: {normalized_score_at_rank(10)}\n\tnDCG@50: {normalized_score_at_rank(50)}")
 
 print(f"Average Score: {average_score/(3*len(query_numbers))}")
     
