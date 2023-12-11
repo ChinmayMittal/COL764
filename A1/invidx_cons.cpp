@@ -1,3 +1,4 @@
+#include <bits/stdc++.h> // SUBMISSION 
 #include <iostream>
 #include <string>
 #include <filesystem>
@@ -17,7 +18,8 @@
 #include "tokenizer.h"
 #include "utils.h"
 
-namespace fs = std::__fs::filesystem;
+// SUBMISSION CHECK FOR UBUNTU
+namespace fs = std::filesystem;
 
 
 void posting_list_to_disk(std::map<std::string, std::vector<std::pair<int, int>>> &postings_list, std::string file_path)
@@ -273,6 +275,7 @@ int main(int argc, char *argv[]) {
             ++file_cnt;
         }
     }
+    std::cout << "File Count: " << file_cnt << std::endl;
 
     int files_processed = 0;
     int temporary_file_count = 0;

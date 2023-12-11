@@ -1,6 +1,6 @@
 # Compiler settings
 CXX = g++
-CXXFLAGS = --std=c++11 -Wall
+CXXFLAGS = --std=c++17 -Wall
 
 # Output executable name
 INVERT_INDEX_TARGET = inverted_index

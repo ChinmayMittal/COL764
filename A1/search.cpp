@@ -1,3 +1,4 @@
+#include <bits/stdc++.h> // SUBMISSION 
 #include <iostream>
 #include <sstream>
 #include <fstream>
@@ -242,14 +243,14 @@ int main(int argc, char* argv[])
             {
                 return vocab_dict[a].first < vocab_dict[b].first ; // token with smaller document count comes first 
             }
-            return true;
+            return a.length() < b.length();
         });   
 
         std::map<std::string, int> query_token_cnt;
         for(auto const &token: query_title_tokens)
             query_token_cnt[token] += 1;
 
-        int content_tokens_to_consider = std::max((int)query_content_tokens.size()/4, 10);
+        int content_tokens_to_consider = std::max((int)query_content_tokens.size()/2, 10);
         if(content_tokens_to_consider > query_content_tokens.size()) content_tokens_to_consider = query_content_tokens.size();
         for(int idx = 0; idx < content_tokens_to_consider; idx++)
             query_token_cnt[query_content_tokens[idx]] += 1;
@@ -271,7 +272,7 @@ int main(int argc, char* argv[])
                 continue; // ignore query term if not in are in vocabulary
             document_frequency = vocab_dict[query_term].first;
             byte_offset = vocab_dict[query_term].second;
-            if((float)document_frequency > 0.1 * total_document_count && total_document_count > 1e4) // ignore common words if large collection size
+            if((float)document_frequency > 0.25 * total_document_count && total_document_count > 1e4) // ignore common words if large collection size
                 continue;
             std::vector<std::pair<int, int>>postings_list = get_postings_list(index_file_path, byte_offset, document_frequency, compresion_arg);
             for(auto const &pr : postings_list)

@@ -1,3 +1,4 @@
+#include <bits/stdc++.h> // SUBMISSION 
 #include <iostream>
 #include <filesystem>
 #include <fstream>
@@ -5,13 +6,15 @@
 #include <unordered_map>
 #include <sstream>
 #include <list>
+#include <cmath>
 
-# include "tokenizer.h"
+#include "tokenizer.h"
 #include "document.h"
 #include "pugixml.hpp"
 #include "utils.h"
 
-namespace fs = std::__fs::filesystem;
+// SUBMISSION CHECK
+namespace fs = std::filesystem;
 
 
 void getNonTextFilesRecursively(const fs::path& directory, std::vector<fs::path>& nonTextFiles) {
@@ -85,6 +88,7 @@ BPETokenizer::BPETokenizer(const std::set<char>& delimiters, const std::string i
         std::string first, second;
         iss >> first >> second;
         merges.push_back(std::make_pair(first, second));
+        splits[first+second] = std::vector<std::string>{first+second};
     }
     initial_merges.close();
 }
@@ -289,7 +293,7 @@ void BPETokenizer::train(const std::string training_directory,const std::string 
         this->total_initial_merges = 0;
     }
     getNonTextFilesRecursively(training_directory, non_text_files);
-    for(int idx = 0; idx < non_text_files.size(); idx += 3) // prune dataset
+    for(int idx = 0; idx < non_text_files.size(); idx += 2) // prune dataset
     {
         if(idx % 25 == 0 )
         {
@@ -381,22 +385,24 @@ std::vector<std::string> BPETokenizer::tokenize(const std::string &text)
 
 }
 
-// int main(int argc, char* argv[])
-// {
-//     BPETokenizer tokenizer(get_basic_delimiters(), 500);
-//     // std::vector<std::string> corpus;
-//     // corpus.push_back("This is part of the information retreival course");
-//     // corpus.push_back("My name is chinmay");
-//     // corpus.push_back("This is a randomly generated sentence");
-//     // corpus.push_back("Tokenization algorithm using byte pair encoding");
+/*
+int main(int argc, char* argv[])
+{
+    BPETokenizer tokenizer(get_base_delimiters(), 25000);
+    // std::vector<std::string> corpus;
+    // corpus.push_back("This is part of the information retreival course");
+    // corpus.push_back("My name is chinmay");
+    // corpus.push_back("This is a randomly generated sentence");
+    // corpus.push_back("Tokenization algorithm using byte pair encoding");
 
-//     // tokenizer.train(corpus);
-//     tokenizer.train("./train_data/", "bpe_merges", "./data_files/bpe_merges");
-//     std::string text = "This, is the \'text\' I want to tokenize; My name is:chinmay. "; 
-//     // std::vector<std::string> tokens = tokenizer.tokenize(text);
-//     // for(auto token : tokens)
-//     //     std::cout << "-->" << token << "\n" ;
+    // tokenizer.train(corpus);
+    tokenizer.train("./train_data/", "bpe_merges", "");
+    std::string text = "This, is the \'text\' I want to tokenize; My name is:chinmay. "; 
+    // std::vector<std::string> tokens = tokenizer.tokenize(text);
+    // for(auto token : tokens)
+    //     std::cout << "-->" << token << "\n" ;
 
 
-//     return 0;
-// }
+    return 0;
+}
+*/

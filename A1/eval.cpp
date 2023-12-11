@@ -21,13 +21,15 @@ int main(int argc, char* argv[])
 
     std::unordered_map<int, std::set<std::string>> query_number_to_relevant_documents;
     std::string line;
+    int total_correct_count =0;
+    int total_query_count = 1;
+    float total_f1 = 0.0;
     while(std::getline(ground_truth, line))
     {
         std::istringstream iss(line);
         int query_number, iteration, relevance;
         std::string docID;
         iss >> query_number >> iteration >> docID >> relevance;
-        // std::cout << query_number << " " << iteration << " " << docID << " " << relevance << "\n";
         if(relevance)
         {
             query_number_to_relevant_documents[query_number].insert(docID);
@@ -47,7 +49,14 @@ int main(int argc, char* argv[])
         if(query_number != current_query_number)
         {
             if(query_number != -1)
-                std::cout << current_query_number << " Correct: " << current_correct_count << " Average F1: "  << average_f1 / 4  << "\n";
+            {
+                // std::cout << current_query_number << " Correct: " << current_correct_count << " Average F1: "  << average_f1 / 4  << "\n";
+                std::cout << current_correct_count << "\n" ;
+                // std::cout << average_f1/4 << "\n";
+                total_f1 += average_f1/4;
+                total_correct_count += current_correct_count;
+                total_query_count += 1;
+            }
             current_query_number=query_number;
             current_correct_count = 0;
             query_results_count = 0;
@@ -60,7 +69,7 @@ int main(int argc, char* argv[])
         query_results_count ++;
 
 
-        if(query_results_count % 25 == 0)
+        if(query_results_count == 100 or query_results_count == 50 or query_results_count == 20 or query_results_count == 10)
         {
             float precision = current_correct_count / (float) query_results_count ;
             float recall =  current_correct_count / (float) query_number_to_relevant_documents[query_number].size();
@@ -74,6 +83,13 @@ int main(int argc, char* argv[])
         
 
     }
+    // std::cout << current_query_number << " Correct: " << current_correct_count << " Average F1: "  << average_f1 / 4  << "\n";
+    std::cout << current_correct_count << "\n" ;
+    // std::cout << average_f1/4 << "\n";
+    total_f1 += average_f1/4;
+    total_correct_count += current_correct_count ;
+    std::cout << "Average Correct: " << total_correct_count / total_query_count << "\n";
+    // std::cout << "Average F1: " << total_f1 / total_query_count << "\n";
     results.close();
 
     return 0;
